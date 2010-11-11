@@ -60,7 +60,6 @@ def parse_params():
     argv = sys.argv
     argc = len(argv)
     i = 1
-    print(argc)
     while i < argc:
         arg = argv[i].strip()
         i+=1
@@ -122,7 +121,6 @@ def parse_params():
         else:
             i-=1;
             break;
-    print(i)
     if i == argc:
         return 1;
     for j in range(i,argc):
