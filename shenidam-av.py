@@ -176,6 +176,8 @@ def check_params():
 def usage():
     error("""USAGE :{0} [options] av_track_1 ... av_track_n
 Options:
+-a / --audio-only : do not copy any video information into the output files.
+
 -b / --base filename : determine the base audio (or audio-visual) file (to which the tracks will be matched) MANDATORY
 
 -o / --output pattern: determine the pattern of output filenames. Patterns can include the strings {{seq}} (or {{seq/d}} where d is the minimum number of digits), {{file}}, {{base}}, {{ext}} and {{dir}} MANDATORY
@@ -186,13 +188,15 @@ Options:
 
 -aep / --audio-export-params quoted_param_string : parameters to pass to ffmpeg while exporting. Requires format, and sometimes codec. (default "-acodec pcm_s24le -f wav")
 
--arp / --audio-remix-params quoted_param_string : parameters to pass to ffmpeg while remixing (replacing the audio from the tracks with shenidam's output). Should set at least -vcodec and -acodec (default : "-vcodec copy -acodec copy")
+-arp / --audio-remix-params quoted_param_string : parameters to pass to ffmpeg while remixing (replacing the audio from the tracks with shenidam's output). Should set at least -vcodec and -acodec (default :"-acodec copy" if -a is set, "-vcodec copy -acodec copy" otherwise)
 
 -sp / --shenidam-params quoted_param_string : extra parameters to pass to shenidam
 
 -se / --shenidam-executable command: the shenidam executable / command
 
--fe / --ffmpeg-executable command: the ffmpeg executable / command""".format(sys.argv[0]))
+-fe / --ffmpeg-executable command: the ffmpeg executable / command
+
+""".format(sys.argv[0]))
 
 class TemporaryFile(object):
     def __init__(self,fns,delete=True):
