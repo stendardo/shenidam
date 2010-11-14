@@ -1,3 +1,0 @@
-#!/bin/sh
-export PYTHONPATH=$PYTHONPATH:${SHENIDAM_PYTHON_DIR}
-python ${SHENIDAM_PYTHON_DIR}/shenidam-av.py "$@"
