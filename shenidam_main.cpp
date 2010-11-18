@@ -1,8 +1,21 @@
 /*
- * shenidam_main.cpp
- *
- *  Created on: Nov 1, 2010
- *      Author: nabil
+    Copyright 2010 Nabil Stendardo <nabil@stendardo.org>
+
+    This file is part of Shenidam.
+
+    Shenidam is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) version 2 of the same License.
+
+    Shenidam is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Shenidam.  If not, see <http://www.gnu.org/licenses/>.
+
  */
 
 
@@ -363,8 +376,8 @@ int process_audio()
 	}
 	float* base_b;
 	read_sndfile_average(base,&base_info,&base_b);
-	send_message("base-read","file",base_filename);
 	shenidam_set_base_audio(processor,FORMAT_SINGLE,(void*)base_b,base_info.frames,(double)base_info.samplerate);
+	send_message("base-read","file",base_filename);
 	std::free(base_b);
 	for (int i = 0; i < num_files; i++)
 	{
@@ -387,6 +400,7 @@ int process_audio()
 		std::map<std::string,std::string> kv;
 		kv["determined_in"]=boost::lexical_cast<std::string>(in);
 		kv["determined_length"]=boost::lexical_cast<std::string>(length);
+		kv["file"]=input_fn;
 		send_message("track-position-determined",kv);
 		if (default_output || out_tracks.size())
 		{
@@ -412,7 +426,7 @@ int process_audio()
 			send_message("wrote-file","file",out_fn);
 			sf_close(out);
 		}
-
+        send_message("done");
 	}
 	sf_close(base);
 	return 0;

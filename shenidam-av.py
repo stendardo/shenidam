@@ -1,4 +1,22 @@
-#!/usr/bin/env python
+"""
+    Copyright 2010 Nabil Stendardo <nabil@stendardo.org>
+
+    This file is part of Shenidam.
+
+    Shenidam is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) version 2 of the same License.
+
+    Shenidam is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with Shenidam.  If not, see <http://www.gnu.org/licenses/>.
+
+"""
 from __future__ import print_function
 import uuid
 import sys
@@ -60,68 +78,65 @@ def remix_audio(avfilename,track_fn,output_fn):
     else:
         run_command("{ffmpeg} -y -v 0 -loglevel error -i \"{avfilename}\" -i \"{track_fn}\" -map 0:0 -map 1:0  {audio_remix_params} \"{output_fn}\"".format(ffmpeg = FFMPEG, avfilename=avfilename,track_fn=track_fn,output_fn=output_fn,audio_remix_params=AUDIO_REMIX_PARAMS))
 
-def parse_params():
-    global VERBOSE, QUIET, SHENIDAM, FFMPEG, SHENIDAM_PARAMS, TRANSCODE_BASE, OUTPUT_PATTERN, BASE_FN, AUDIO_EXPORT_PARAMS, AUDIO_REMIX_PARAMS, SHENIDAM_PARAMS, TEMP_DIR, AUDIO_ONLY;
+def parse_params(model):
     argv = sys.argv
     argc = len(argv)
     i = 1
+    output_pattern = None
+    audio_only = False
+    audio_remix_params = None
     while i < argc:
         arg = argv[i].strip()
         i+=1
         if arg == "-v" or arg == "--verbose":
-            VERBOSE = True
+            model.verbose = True
         elif arg == "-a" or arg == "--audio-only":
-            AUDIO_ONLY = True
+            audio_only = True
         elif arg == "-q" or arg == "--quiet":
-            QUIET = True
+            model.quiet = True
         elif arg == "-se" or arg == "--shenidam-executable":
             if i >= argc:
 	            return 1
-            SHENIDAM = argv[i].strip()
+            model.shenidam = argv[i].strip()
             i+=1;
         elif arg == "-fe" or arg == "--ffmpeg-executable":
             if i >= argc:
 	            return 1;
-            FFMPEG = argv[i].strip()
+            model.ffmpeg = argv[i].strip()
             i+=1
         elif arg == "-tb" or arg == "--transcode-base":
-            TRANSCODE_BASE = True
+            model.transcode_base = True
         elif arg == "-sp" or arg == "--shenidam-params":
             if i >= argc:
 	            return 1;
-            SHENIDAM_PARAMS = argv[i].strip()
+            model.shenidam_extra_args = argv[i].strip()
             i+=1
         elif arg == "-ntb" or arg == "--no-transcode-base":
-            TRANSCODE_BASE = False
+            model.transcode_base = False
         elif arg == "-o" or arg == "--output":
             if i >= argc:
 	            return 1;
-            OUTPUT_PATTERN = argv[i].strip()
+            output_pattern = argv[i].strip()
             i+=1
         elif arg == "-b" or arg == "--base":
             if i >= argc:
 	            return 1;
-            BASE_FN = argv[i].strip()
+            model.base_fn = argv[i].strip()
             i+=1
         elif arg == "-aep" or arg == "--audio-export-params":
             if i >= argc:
 	            return 1;
-            AUDIO_EXPORT_PARAMS = argv[i].strip()
+            model.audio_export_params = argv[i].strip()
             i+=1
         elif arg == "-arp" or arg == "--audio-remix-params":
             if i >= argc:
 	            return 1;
-            AUDIO_REMIX_PARAMS = argv[i].strip()
-            i+=1
-        elif arg == "-sp" or arg == "--shenidam-params":
-            if i >= argc:
-	            return 1;
-            SHENIDAM_PARAMS = argv[i].strip()
+            audio_remix_params = argv[i].strip()
             i+=1
         elif arg == "-td" or arg == "--temporary-directory":
             if i >= argc:
 	            return 1;
-            TEMP_DIR = argv[i].strip()
+            model.tmp_dir = argv[i].strip()
             i+=1
         else:
             i-=1;
@@ -129,53 +144,34 @@ def parse_params():
     if i == argc:
         return 1;
     for j in range(i,argc):
-        INPUT_TRACKS.append(argv[j].strip())
+        model.input_tracks.append(argv[j].strip())
+    if audio_remix_params is None:
+        audio_remix_params = "-vcodec copy -acodec copy" if not audio_only else "-acodec copy"
+    model.output_patterns_with_audio_only_flag_and_remix_params = [[output_pattern,audio_only,audio_remix_params]]
     return 0;
-def filename_from_pattern(i,filename,pattern):
-    basename = os.path.basename(filename)
-    basename_noext,ext = os.path.splitext(basename)
-    dirname = os.path.dirname(filename)
-    if dirname == "":
-        dirname="."
-    def repl(matchobj):
-        x = str(i)
-        if (matchobj.group(1) is None):
-            return x
-        n = int(matchobj.group(1))
-        for j in range(len(x),n):
-            x = '0'+x
-        return x
-    pattern = re.sub(NUM_PATTERN,repl,pattern)
-    pattern = re.sub(BASENAME_PATTERN,basename,pattern)
-    pattern = re.sub(BASENAME_NOEXT_PATTERN,basename_noext,pattern)
-    pattern = re.sub(DIRNAME_PATTERN,dirname,pattern)
-    pattern = re.sub(EXT_PATTERN,ext,pattern)
-    return pattern
 def error(str):
     return print(str,file=sys.stderr)
-def check_params():
-    global TRANSCODE_BASE,AUDIO_REMIX_PARAMS;
-    if QUIET and VERBOSE:
-        VERBOSE = False
-    if BASE_FN is None:
+def check_params(model):
+    if model.quiet:
+        model.verbose = False
+    if model.base_fn is None:
         error("ERROR: No base defined")
         return 1;
-    if len(INPUT_TRACKS) == 0:
+    if len(model.input_tracks) == 0:
         error("ERROR: No tracks defined.")
         return 1;
-    if len(OUTPUT_PATTERN) == 0:
+    op = model.output_patterns_with_audio_only_flag_and_remix_params[0][0]
+    if op is None or len(op) == 0:
         error("ERROR: No output defined.")
         return 1;
-    if not SHENIDAM:
+    if not model.shenidam:
         error("ERROR: Invalid shenidam command.")
         return 1;
-    if not FFMPEG:
+    if not model.ffmpeg:
         error("ERROR: Invalid FFMPEG command")
         return 1;
-    if TRANSCODE_BASE is None:
-        TRANSCODE_BASE = not shenidam.Shenidam(SHENIDAM).can_open(BASE_FN)
-    if AUDIO_REMIX_PARAMS is None:
-        AUDIO_REMIX_PARAMS = "-vcodec copy -acodec copy" if not AUDIO_ONLY else "-acodec copy"
+    if model.transcode_base is None:
+        model.transcode_base = not shenidam.Shenidam(model.shenidam).can_open(model.base_fn)
     return 0
 def usage():
     error("""USAGE :{0} [options] av_track_1 ... av_track_n
@@ -202,62 +198,12 @@ Options:
 
 """.format(sys.argv[0]))
 
-def delete_filenames(filenames,delete=True):
-    if delete:
-        for fn in filenames:
-            try:
-                os.remove(fn)
-            except Exception:
-                pass
-class TemporaryFile(object):
-    def __init__(self,fns,delete=True):
-        self.filenames = list(fns)
-        self.delete = delete
-    def __enter__(self):
-        pass
-    def __exit__(self,type,value,traceback):
-        delete_filenames(self.filenames,self.delete)
-        return False
-
-def create_temporary_file_name():
-    return os.path.join(TEMP_DIR,"shenidam-av-tmp-"+uuid.uuid4().hex)
-def convert():
-    base = BASE_FN
-    if TRANSCODE_BASE:
-        base = create_temporary_file_name()
-    with TemporaryFile([base],TRANSCODE_BASE):
-        if TRANSCODE_BASE:
-            extract_audio(BASE_FN,base)
-        shenidam_e = shenidam.Shenidam(SHENIDAM)
-        transcoding_required = [not shenidam_e.can_open(x) for x in INPUT_TRACKS]
-        input_fns_with_needs_transcoding = [((create_temporary_file_name() if transcoding_required[i] else x),transcoding_required[i]) for (i,x) in enumerate(INPUT_TRACKS)]
-        input_transcoded_fns = [x for (x,y) in input_fns_with_needs_transcoding if y]
-        input_fns = [x for (x,y) in input_fns_with_needs_transcoding]
-        input_fns_to_transcode = [x for (i,x) in enumerate(INPUT_TRACKS) if transcoding_required[i]]
-        with TemporaryFile(input_transcoded_fns):
-            error("Extracting Audio")
-            output_remixed_files = [filename_from_pattern(ix[0],ix[1],OUTPUT_PATTERN) for ix in enumerate(INPUT_TRACKS)]
-            output_temp_files = [create_temporary_file_name() for x in INPUT_TRACKS]
-            remixed_temp_files = [create_temporary_file_name()+"."+os.path.basename(x) for x in output_remixed_files]
-            for x,y in zip(input_fns_to_transcode,input_transcoded_fns):
-                extract_audio(x,y)
-            with TemporaryFile(output_temp_files):
-                error("Running Shenidam")
-                run_shenidam(base,input_fns,output_temp_files)
-                delete_filenames([base],TRANSCODE_BASE)
-                delete_filenames(input_transcoded_fns)
-                error("Remixing Audio")
-                with TemporaryFile(remixed_temp_files):
-                    for input_av,audio,temp_output_av in zip(INPUT_TRACKS,output_temp_files,remixed_temp_files):
-                        remix_audio(input_av,audio,temp_output_av)
-                    delete_filenames(output_temp_files)
-                    for output_av,temp_output_av in zip(output_remixed_files,remixed_temp_files):
-                        shutil.move(temp_output_av,output_av)
 def main():
-    if (parse_params() or check_params()):
+    model = shenidam.FileProcessorModel()
+    if (parse_params(model) or check_params(model)):
         usage()
         return 1;
-    convert()
+    shenidam.ShenidamFileProcessor(model,shenidam.StreamNotifier(sys.stderr)).convert()
     return 0
 
 if __name__ == "__main__":
