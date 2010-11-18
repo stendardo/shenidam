@@ -173,8 +173,7 @@ def check_params():
         error("ERROR: Invalid FFMPEG command")
         return 1;
     if TRANSCODE_BASE is None:
-        base_lower = BASE_FN.lower()
-        TRANSCODE_BASE = not base_lower.endswith(".wav") and not base_lower.endswith(".aiff") and not base_lower.endswith(".flac")
+        TRANSCODE_BASE = not shenidam.Shenidam(SHENIDAM).can_open(BASE_FN)
     if AUDIO_REMIX_PARAMS is None:
         AUDIO_REMIX_PARAMS = "-vcodec copy -acodec copy" if not AUDIO_ONLY else "-acodec copy"
     return 0
@@ -185,15 +184,15 @@ Options:
 
 -b / --base filename : determine the base audio (or audio-visual) file (to which the tracks will be matched) MANDATORY
 
--o / --output pattern: determine the pattern of output filenames. Patterns can include the strings {{seq}} (or {{seq/d}} where d is the minimum number of digits), {{file}}, {{base}}, {{ext}} and {{dir}} MANDATORY
+-o / --output pattern: determine the pattern of output filenames. Patterns can include the strings {{seq}} (or {{seq/d}} where d is the minimum number of digits), {{file}}, {{base}}, {{ext}} (which includes the starting period) and {{dir}} MANDATORY
 
--td / --temporary-directory : The temporary directory in which to store the extracted audio files (default /tmp/)
+-td / --temporary-directory : The temporary directory in which to store the extracted audio files (default is the machine's temporary directory)
 
--tb / --transcode-base or --ntb / --no-transcode-base : Force transcoding (resp. no transcoding) of the base file (default is to transcode except for a number of predefined "safe" extensions (e.g. .wav)
+-tb / --transcode-base or --ntb / --no-transcode-base : Force transcoding (resp. no transcoding) of the base file (default is to transcode except for a file for which transcoding is not possible)
 
 -aep / --audio-export-params quoted_param_string : parameters to pass to ffmpeg while exporting. Requires format, and sometimes codec. (default "-acodec pcm_s24le -f wav")
 
--arp / --audio-remix-params quoted_param_string : parameters to pass to ffmpeg while remixing (replacing the audio from the tracks with shenidam's output). Should set at least -vcodec and -acodec (default :"-acodec copy" if -a is set, "-vcodec copy -acodec copy" otherwise)
+-arp / --audio-remix-params quoted_param_string : parameters to pass to ffmpeg while remixing (replacing the audio from the tracks with shenidam's output). Should set at least -acodec (and -vcodec if -a is not set)  (default : if -a is set "-acodec copy", otherwise "-vcodec copy -acodec copy")
 
 -sp / --shenidam-params quoted_param_string : extra parameters to pass to shenidam
 
@@ -229,17 +228,22 @@ def convert():
     with TemporaryFile([base],TRANSCODE_BASE):
         if TRANSCODE_BASE:
             extract_audio(BASE_FN,base)
-        input_transcoded_fns = [create_temporary_file_name() for x in INPUT_TRACKS]
+        shenidam_e = shenidam.Shenidam(SHENIDAM)
+        transcoding_required = [not shenidam_e.can_open(x) for x in INPUT_TRACKS]
+        input_fns_with_needs_transcoding = [((create_temporary_file_name() if transcoding_required[i] else x),transcoding_required[i]) for (i,x) in enumerate(INPUT_TRACKS)]
+        input_transcoded_fns = [x for (x,y) in input_fns_with_needs_transcoding if y]
+        input_fns = [x for (x,y) in input_fns_with_needs_transcoding]
+        input_fns_to_transcode = [x for (i,x) in enumerate(INPUT_TRACKS) if transcoding_required[i]]
         with TemporaryFile(input_transcoded_fns):
             error("Extracting Audio")
             output_remixed_files = [filename_from_pattern(ix[0],ix[1],OUTPUT_PATTERN) for ix in enumerate(INPUT_TRACKS)]
             output_temp_files = [create_temporary_file_name() for x in INPUT_TRACKS]
             remixed_temp_files = [create_temporary_file_name()+"."+os.path.basename(x) for x in output_remixed_files]
-            for x,y in zip(INPUT_TRACKS,input_transcoded_fns):
+            for x,y in zip(input_fns_to_transcode,input_transcoded_fns):
                 extract_audio(x,y)
             with TemporaryFile(output_temp_files):
                 error("Running Shenidam")
-                run_shenidam(base,input_transcoded_fns,output_temp_files)
+                run_shenidam(base,input_fns,output_temp_files)
                 delete_filenames([base],TRANSCODE_BASE)
                 delete_filenames(input_transcoded_fns)
                 error("Remixing Audio")

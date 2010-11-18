@@ -5,6 +5,7 @@ try:
     import cStringIO as StringIO
 except ImportError:
     import StringIO
+import shlex
 def do_nothing(*args,**kwds):
     pass
 def forward(stream):
@@ -35,7 +36,7 @@ class ProcessRunner(object):
         stderr_sio = StringIO.StringIO()
         process = None
         try:
-            process = subprocess.Popen(self.command,bufsize=1,stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=True)
+            process = subprocess.Popen(shlex.split(self.command),bufsize=1,stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False)
             stdout_reader = StreamReader([forward(stdout_sio),self.stdout_callback],process.stdout)
             stderr_reader = StreamReader([forward(stderr_sio),self.stderr_callback],process.stderr)
             stdout_reader.start();
@@ -68,7 +69,7 @@ def message_handler_print(stream):
         stream.write(line)
     return inner
 class Shenidam(object):
-    def __init__(self,executable,extra_args,message_callback,error_callback=forward(sys.stderr)):
+    def __init__(self,executable,extra_args="",message_callback=do_nothing,error_callback=forward(sys.stderr)):
         def mycallback(line):
             if line.startswith("MESSAGE:"):
                 return message_callback(line,_parse_event(line))
@@ -91,3 +92,6 @@ class Shenidam(object):
         cmd = "{executable} -m {extra_args} -n {numargs} -b \"{base}\" {args}".format(executable=self.executable,base=base,numargs=len(input_tracks),args=args,extra_args=self.extra_args)
         res,stdout,stderr = ProcessRunner(cmd,self.output_callback,self.error_callback)()
         return cmd,res,stdout,stderr
+    def can_open(self,filename):
+        cmd = "{executable} -b \"{filename}\" -c".format(executable=self.executable,filename=filename)
+        return not subprocess.call(shlex.split(cmd),stdin=None,stdout=None,stderr=None,shell=False)
