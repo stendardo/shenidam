@@ -70,7 +70,8 @@ def message_handler_print(stream):
 class Shenidam(object):
     def __init__(self,executable,extra_args,message_callback,error_callback=forward(sys.stderr)):
         def mycallback(line):
-            return message_callback(line,_parse_event(line))
+            if line.startswith("MESSAGE:"):
+                return message_callback(line,_parse_event(line))
         self.output_callback = mycallback
         self.executable = executable
         self.extra_args = extra_args
@@ -78,14 +79,15 @@ class Shenidam(object):
     def __call__(self,base,input_tracks,output_tracks):
         if len(input_tracks) <= 0:
             raise ValueError("No input tracks")
-        if len(input_tracks) != len(output_tracks):
-            raise ValueError("len(input_tracks) != len(output_tracks)")
+        if len(output_tracks) > 0 and len(input_tracks) != len(output_tracks):
+            raise ValueError("Invalid number of input tracks")
         args= "-i "
         for x in input_tracks:
             args+= "\"{0}\" ".format(x)
-        args+= "-o "
-        for x in output_tracks:
-            args+= "\"{0}\" ".format(x)
+        if len(output_tracks)>0:
+            args+= "-o "
+            for x in output_tracks:
+                args+= "\"{0}\" ".format(x)
         cmd = "{executable} -m {extra_args} -n {numargs} -b \"{base}\" {args}".format(executable=self.executable,base=base,numargs=len(input_tracks),args=args,extra_args=self.extra_args)
         res,stdout,stderr = ProcessRunner(cmd,self.output_callback,self.error_callback)()
         return cmd,res,stdout,stderr

@@ -7,6 +7,7 @@ import re
 import os.path
 import tempfile
 import shutil
+import shenidam
 FFMPEG = "ffmpeg"
 SHENIDAM = "shenidam"
 AUDIO_REMIX_PARAMS = None
@@ -25,36 +26,40 @@ BASENAME_NOEXT_PATTERN = re.compile("{base}")
 DIRNAME_PATTERN = re.compile("{dir}")
 EXT_PATTERN = re.compile("{ext}")
 AUDIO_ONLY = False
+class SubprocessError(Exception):
+    def __init__(self,error):
+        super(SubprocessError,self).__init__(error)
+def raise_subprocess_error(cmd,stderr,show_error=True):
+    raise SubprocessError("Command '{cmd}' failed{error}".format(cmd=cmd,error=(", error stream was:\n"+stderr) if show_error else ""))
 def run_command(cmd):
     
     try:
-        p = subprocess.Popen(cmd,stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=True)
-        res = p.communicate(None)
-        if p.returncode != 0:
-            print("ERROR: Command '{0}' failed, standard error was:\n{1}".format(cmd,res[1]),file=sys.stderr)
-            raise Exception()
+        stderr_forward = shenidam.forward(sys.stderr) if VERBOSE else shenidam.do_nothing;
+        
+        res,stdout,stderr = shenidam.ProcessRunner(cmd,stderr_forward,stderr_forward)()
+        if res != 0:
+            raise_subprocess_error(cmd,stderr,not VERBOSE)
     except OSError as e:
-        print(e,file=sys.stderr)
-        raise Exception()
-
+        raise_subprocess_error(cmd,e)
 def extract_audio(avfilename,outfn):
     run_command("{exec_} -y -v 0 -loglevel error -i \"{avfilename}\" -vn {audio_export_params} \"{outfn}\"".format(exec_=FFMPEG,avfilename=avfilename,outfn=outfn,audio_export_params=AUDIO_EXPORT_PARAMS))
 
 def run_shenidam(base_fn,track_fns,output_fns):
-    res = "{shenidam} {shenidam_params} -b \"{base_fn}\" -n {num_tracks} ".format(shenidam_params=SHENIDAM_PARAMS,num_tracks=len(track_fns),shenidam=SHENIDAM,base_fn=base_fn)
-    res+= "-i "
-    for x in track_fns:
-        res+= "\"{0}\" ".format(x)
-    res+= "-o "
-    for x in output_fns:
-        res+= "\"{0}\" ".format(x)
-    run_command(res)
+    try:
+        stderr_forward = shenidam.forward(sys.stderr) if VERBOSE else shenidam.do_nothing;
+        message_handler = shenidam.message_handler_print(sys.stderr) if not QUIET else shenidam.do_nothing
+        cmd,res,stdin,stderr = shenidam.Shenidam(SHENIDAM,SHENIDAM_PARAMS,message_handler,stderr_forward)(base_fn,track_fns,output_fns)
+        if res != 0:
+            raise_subprocess_error(cmd,stderr,not VERBOSE)
+    except OSError as e:
+        raise_subprocess_error(cmd,e)
 
 def remix_audio(avfilename,track_fn,output_fn):
     if AUDIO_ONLY:
-        run_command("{ffmpeg} -y -v 0 -loglevel error -i {track_fn} {audio_remix_params} {output_fn}".format(ffmpeg = FFMPEG, track_fn=track_fn,output_fn=output_fn,audio_remix_params=AUDIO_REMIX_PARAMS))
+        run_command("{ffmpeg} -y -v 0 -loglevel error -i \"{track_fn}\" {audio_remix_params} \"{output_fn}\"".format(ffmpeg = FFMPEG, track_fn=track_fn,output_fn=output_fn,audio_remix_params=AUDIO_REMIX_PARAMS))
     else:
-        run_command("{ffmpeg} -y -v 0 -loglevel error -i {avfilename} -i {track_fn} -map 0:0 -map 1:0  {audio_remix_params} {output_fn}".format(ffmpeg = FFMPEG, avfilename=avfilename,track_fn=track_fn,output_fn=output_fn,audio_remix_params=AUDIO_REMIX_PARAMS))
+        run_command("{ffmpeg} -y -v 0 -loglevel error -i \"{avfilename}\" -i \"{track_fn}\" -map 0:0 -map 1:0  {audio_remix_params} \"{output_fn}\"".format(ffmpeg = FFMPEG, avfilename=avfilename,track_fn=track_fn,output_fn=output_fn,audio_remix_params=AUDIO_REMIX_PARAMS))
+
 def parse_params():
     global VERBOSE, QUIET, SHENIDAM, FFMPEG, SHENIDAM_PARAMS, TRANSCODE_BASE, OUTPUT_PATTERN, BASE_FN, AUDIO_EXPORT_PARAMS, AUDIO_REMIX_PARAMS, SHENIDAM_PARAMS, TEMP_DIR, AUDIO_ONLY;
     argv = sys.argv
@@ -65,7 +70,7 @@ def parse_params():
         i+=1
         if arg == "-v" or arg == "--verbose":
             VERBOSE = True
-        if arg == "-a" or arg == "--audio-only":
+        elif arg == "-a" or arg == "--audio-only":
             AUDIO_ONLY = True
         elif arg == "-q" or arg == "--quiet":
             QUIET = True
@@ -198,6 +203,13 @@ Options:
 
 """.format(sys.argv[0]))
 
+def delete_filenames(filenames,delete=True):
+    if delete:
+        for fn in filenames:
+            try:
+                os.remove(fn)
+            except Exception:
+                pass
 class TemporaryFile(object):
     def __init__(self,fns,delete=True):
         self.filenames = list(fns)
@@ -205,13 +217,9 @@ class TemporaryFile(object):
     def __enter__(self):
         pass
     def __exit__(self,type,value,traceback):
-        if self.delete:
-            for fn in self.filenames:
-                try:
-                    os.remove(fn)
-                except Exception:
-                    pass
+        delete_filenames(self.filenames,self.delete)
         return False
+
 def create_temporary_file_name():
     return os.path.join(TEMP_DIR,"shenidam-av-tmp-"+uuid.uuid4().hex)
 def convert():
@@ -232,10 +240,14 @@ def convert():
             with TemporaryFile(output_temp_files):
                 error("Running Shenidam")
                 run_shenidam(base,input_transcoded_fns,output_temp_files)
+                delete_filenames([base],TRANSCODE_BASE)
+                delete_filenames(input_transcoded_fns)
                 error("Remixing Audio")
                 with TemporaryFile(remixed_temp_files):
-                    for input_av,audio,output_av,temp_output_av in zip(INPUT_TRACKS,output_temp_files,output_remixed_files,remixed_temp_files):
+                    for input_av,audio,temp_output_av in zip(INPUT_TRACKS,output_temp_files,remixed_temp_files):
                         remix_audio(input_av,audio,temp_output_av)
+                    delete_filenames(output_temp_files)
+                    for output_av,temp_output_av in zip(output_remixed_files,remixed_temp_files):
                         shutil.move(temp_output_av,output_av)
 def main():
     if (parse_params() or check_params()):

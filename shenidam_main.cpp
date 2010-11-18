@@ -5,28 +5,34 @@
  *      Author: nabil
  */
 
-#include "shenidam.h"
 
-#include "sndfile.h"
-#include "stdlib.h"
-#include "string.h"
-#include "stdio.h"
 
 #include "boost/random.hpp"
+#include "boost/foreach.hpp"
+#include "boost/lexical_cast.hpp"
+
 #include "ctime"
 #include <vector>
+#include <map>
 #include <string>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 
 
+#include "shenidam.h"
+
+#include "sndfile.h"
+
+
+#define foreach BOOST_FOREACH
 
 
 static int read_sndfile_average(SNDFILE* sndfile,SF_INFO* info,float** result)
 {
 	size_t n = (size_t) std::ceil(info->frames/1024.0);
-	float *res = *result =(float*) malloc(sizeof(float)*n*1024);
-	float* frame = (float*)malloc(sizeof(float)*info->channels*1024);
+	float *res = *result =(float*) std::malloc(sizeof(float)*n*1024);
+	float* frame = (float*)std::malloc(sizeof(float)*info->channels*1024);
 
 	for (int i = 0; i < n;i++)
 	{
@@ -42,7 +48,7 @@ static int read_sndfile_average(SNDFILE* sndfile,SF_INFO* info,float** result)
 			res[i*1024+k]=s/info->channels;
 		}
 	}
-	free(frame);
+	std::free(frame);
 	return 0;
 }
 bool quiet = false;
@@ -50,7 +56,8 @@ bool test = false;
 bool verbose = false;
 bool base_set = false;
 bool default_output = false;
-bool output_mapping = false;
+bool send_messages = false;
+bool can_open_mode = false;
 double size_test_track = 300;
 std::vector<std::string> in_tracks;
 std::vector<std::string> out_tracks;
@@ -60,6 +67,40 @@ int num_files = 0;
 double threshold = 1;
 int num_tries = 5;
 boost::mt19937 gen(std::time(0));
+
+
+
+void send_message(std::string event)
+{
+    if (send_messages)
+    {
+        std::cout << "MESSAGE:"<< event << ";" << std::endl;
+    }
+}
+
+void send_message(std::string event,std::string key,std::string value)
+{
+    if (send_messages)
+    {
+        std::cout << "MESSAGE:"<< event << ";" << key << ":" << value << ";" << std::endl;
+    }
+}
+
+void send_message(std::string event,std::map<std::string,std::string> kv)
+{
+    
+    if (send_messages)
+    {
+        std::pair<std::string,std::string> p;
+        std::cout << "MESSAGE:"<<event<<";";
+        foreach(p,kv)
+        {
+            std::cout << p.first << ":" << p.second << ";";
+        }
+        std::cout << std::endl;
+    }
+}
+
 double randn(double m, double s)
 {
 	boost::normal_distribution<> dist(m, s);
@@ -109,10 +150,7 @@ int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,int in, 
 {
 	if (!info_in->seekable)
 	{
-
-
 		fprintf(stderr,"Error: Base file not seekable");
-
 		return 1;
 	}
 	long real_in = in < 0?0:in;
@@ -124,7 +162,7 @@ int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,int in, 
 		end = info_in->frames;
 	}
 	size_t j = 0;
-	float* frame =(float*) malloc(sizeof(float)*info_in->channels*1024);
+	float* frame =(float*) std::malloc(sizeof(float)*info_in->channels*1024);
 	memset(frame,0,sizeof(float)*info_in->channels*1024);
 	for(long i = in; i < 0; i++)
 	{
@@ -139,12 +177,12 @@ int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,int in, 
 		sf_writef_float(out,frame,frames_to_transfer);
 		j+=frames_to_transfer;
 	}
-	memset(frame,0,sizeof(float)*info_in->channels*1024);
+	std::memset(frame,0,sizeof(float)*info_in->channels*1024);
 	for(; j < sample_length; j++)
 	{
 		sf_writef_float(out,frame,1);
 	}
-	free(frame);
+	std::free(frame);
 	return 0;
 }
 int parse_options(int argc, char** argv)
@@ -234,9 +272,9 @@ int parse_options(int argc, char** argv)
 			 }
 			 default_output = true;
 		 }
-		 else if (arg == "-m" || arg == "--output-mapping" )
+		 else if (arg == "-m" || arg == "--send-messages" )
 		 {
-			 output_mapping = true;
+			 send_messages = true;
 		 }
 		 else if (arg == "-s" || arg == "--sample-rate")
 		 {
@@ -278,6 +316,10 @@ int parse_options(int argc, char** argv)
 				 return 1;
 			 }
 		 }
+		 else if (arg == "-c" || arg == "--can-open-base")
+		 {
+			 can_open_mode = true;
+		 }
 		 else
 		 {
 			 return 1;
@@ -300,7 +342,8 @@ void usage()
 			"\t-t\n\t--test\n\t\ttest mode (requires only base). Tests critical noise boundary according to number of tries and threshold.\n\n"
 			"\t-nt\n\t--num-tries integer\n\t\tNumber of tries for test mode (default 5). More means more precise boundary and processing time.\n\n"
 			"\t-tt\n\t--test-threshold real\n\t\tThreshold for determining critical noise boundary (Default 0.1, less means more precise boundary)\n\n"
-			"\t-ta\n\t--test-track-size real\n\t\tSize in seconds of generated track for test mode (Default 120s, needs to be less than the audio signal's length.)\n\n");
+			"\t-ta\n\t--test-track-size real\n\t\tSize in seconds of generated track for test mode (Default 120s, needs to be less than the audio signal's length.)\n\n"
+			"\t-c\n\t--can-open-base\n\t\tTest to see if the base can be opened (and return a non-zero value if not)\n\n");
 
 }
 
@@ -312,7 +355,7 @@ int process_audio()
 {
 	shenidam_t processor = shenidam_create(sample_rate);
 	SF_INFO base_info;
-	memset(&base_info,0,sizeof(SF_INFO));
+	std::memset(&base_info,0,sizeof(SF_INFO));
 	SNDFILE* base = sf_open(base_filename.c_str(),SFM_READ,&base_info);
 	if (base == NULL)
 	{
@@ -320,25 +363,31 @@ int process_audio()
 	}
 	float* base_b;
 	read_sndfile_average(base,&base_info,&base_b);
+	send_message("base-read","file",base_filename);
 	shenidam_set_base_audio(processor,FORMAT_SINGLE,(void*)base_b,base_info.frames,(double)base_info.samplerate);
-	free(base_b);
+	std::free(base_b);
 	for (int i = 0; i < num_files; i++)
 	{
 		std::string input_fn = in_tracks[i];
 		size_t length;
 		int in;
 		SF_INFO track_info;
-		memset(&track_info,0,sizeof(SF_INFO));
+		std::memset(&track_info,0,sizeof(SF_INFO));
 		float* track_b;
 		SNDFILE* track = sf_open(input_fn.c_str(),SFM_READ,&track_info);
 		read_sndfile_average(track,&track_info,&track_b);
+		send_message("track-read","file",input_fn);
 		sf_close(track);
 		if (shenidam_get_audio_range(processor,FORMAT_SINGLE,(void*)track_b,track_info.frames,(double)track_info.samplerate,&in,&length))
 		{
 			fprintf(stderr,"ERROR: Error mapping track to base .\n");
-			free(track);
+			std::free(track);
 			continue;
 		}
+		std::map<std::string,std::string> kv;
+		kv["determined_in"]=boost::lexical_cast<std::string>(in);
+		kv["determined_length"]=boost::lexical_cast<std::string>(length);
+		send_message("track-position-determined",kv);
 		if (default_output || out_tracks.size())
 		{
 			SF_INFO out_info = base_info;
@@ -353,35 +402,47 @@ int process_audio()
 				out_fn = out_tracks[i];
 			}
 			SNDFILE* out = sf_open(out_fn.c_str(),SFM_WRITE,&out_info);
+			
 			if (copy_partial_sndfile(base,&base_info,out,in,length))
 			{
 				sf_close(base);
 				sf_close(out);
 				return 1;
 			}
+			send_message("wrote-file","file",out_fn);
 			sf_close(out);
-			if (output_mapping)
-			{
-				long in_val = in;
-				long length_val = length;
-				printf("%ld\t%ld\n",in_val,length_val);
-			}
 		}
 
 	}
 	sf_close(base);
 	return 0;
 }
+
+int can_open_base()
+{
+    SF_INFO base_info;
+	std::memset(&base_info,0,sizeof(SF_INFO));
+	SNDFILE* base = sf_open(base_filename.c_str(),SFM_READ,&base_info);
+	if (base == NULL)
+	{
+	    send_message("cannot-open-file","file",base_filename);
+	    return 1;
+	}
+	send_message("can-open-file","file",base_filename);
+	sf_close(base);
+	return 0;
+}
+
 bool test_once(shenidam_t processor, float* base,size_t total_num_samples,double sample_rate,size_t num_samples_track, double sigma)
 {
 	int real_in = randi(0,total_num_samples-num_samples_track-1);
-	float* track = (float*) malloc(num_samples_track*sizeof(float));
-	memcpy(track,&base[real_in],num_samples_track*sizeof(float));
+	float* track = (float*) std::malloc(num_samples_track*sizeof(float));
+	std::memcpy(track,&base[real_in],num_samples_track*sizeof(float));
 	add_gaussian_noise(track,num_samples_track,sigma);
 	size_t dummy;
 	int in;
 	shenidam_get_audio_range(processor,FORMAT_SINGLE,track,num_samples_track,sample_rate,&in,&dummy);
-	free(track);
+	std::free(track);
 	return std::abs(in - real_in)<sample_rate*threshold;
 
 }
@@ -426,7 +487,7 @@ int do_test()
 {
 	shenidam_t processor = shenidam_create(sample_rate);
 	SF_INFO base_info;
-	memset(&base_info,0,sizeof(SF_INFO));
+	std::memset(&base_info,0,sizeof(SF_INFO));
 	SNDFILE* base = sf_open(base_filename.c_str(),SFM_READ,&base_info);
 	if (base == NULL)
 	{
@@ -435,7 +496,6 @@ int do_test()
 	float* base_b;
 	read_sndfile_average(base,&base_info,&base_b);
 	sf_close(base);
-	//normalize(base_b,base_info.frames);
 	size_t total_num_samples = base_info.frames;
 	size_t num_samples_track = (size_t)ceil(size_test_track*base_info.samplerate);
 	if (num_samples_track >= total_num_samples)
@@ -467,7 +527,7 @@ int do_test()
 	double critical_noise_sd = (in+out)/2;
 	double cnsd_db = 10*log(1/(critical_noise_sd*critical_noise_sd));
 	printf("Critical noise %g (%g db)\n",critical_noise_sd,cnsd_db);
-	free(base_b);
+	std::free(base_b);
 	shenidam_destroy(processor);
 	return 0;
 }
@@ -477,8 +537,8 @@ int main(int argc, char **argv) {
 		usage();
 		return 1;
 	}
-	bool has_output = test || output_mapping || default_output || out_tracks.size();
-	bool has_input = test || in_tracks.size();
+	bool has_output = test || send_messages || default_output || out_tracks.size() || can_open_mode;
+	bool has_input = test || in_tracks.size() || can_open_mode;
 	if (quiet && verbose)
 	{
 		verbose = false;
@@ -491,19 +551,23 @@ int main(int argc, char **argv) {
 	}
 	if (!has_output)
 	{
-		fprintf(stderr,"ERROR: No output. One of [-o, -d, -t, -m] is required.\n");
+		fprintf(stderr,"ERROR: No output. One of [-o, -d, -t, -m, -c] is required.\n");
 		usage();
 		return 1;
 	}
 	if (!has_input)
 	{
-		fprintf(stderr,"ERROR: No input. One of [-t, -i] is required.\n");
+		fprintf(stderr,"ERROR: No input. One of [-t, -i, -c] is required.\n");
 		usage();
 		return 1;
 	}
 	if (test)
 	{
 		return do_test();
+	}
+	else if (can_open_mode)
+	{
+	    return can_open_base();
 	}
 	else
 	{
