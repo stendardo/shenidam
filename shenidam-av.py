@@ -164,14 +164,12 @@ def check_params(model):
     if op is None or len(op) == 0:
         error("ERROR: No output defined.")
         return 1;
-    if not model.shenidam:
-        error("ERROR: Invalid shenidam command.")
-        return 1;
-    if not model.ffmpeg:
-        error("ERROR: Invalid FFMPEG command")
-        return 1;
     if model.transcode_base is None:
         model.transcode_base = not shenidam.Shenidam(model.shenidam).can_open(model.base_fn)
+    try:
+        shenidam.check_model(model)
+    except shenidam.ModelException as e:
+        error("ERROR: "+str(e))
     return 0
 def usage():
     error("""USAGE :{0} [options] av_track_1 ... av_track_n
@@ -203,6 +201,7 @@ def main():
     if (parse_params(model) or check_params(model)):
         usage()
         return 1;
+        
     shenidam.ShenidamFileProcessor(model,shenidam.StreamNotifier(sys.stderr)).convert()
     return 0
 

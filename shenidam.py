@@ -17,7 +17,7 @@
     along with Shenidam.  If not, see <http://www.gnu.org/licenses/>.
 
 """
-from __future__ import print_function
+from __future__ import print_function,division
 import threading
 import sys
 import re
@@ -30,6 +30,7 @@ try:
     import cStringIO as StringIO
 except ImportError:
     import StringIO
+
 import shlex
 
 NUM_PATTERN = re.compile("{seq(?:/(\d+))?}")
@@ -75,13 +76,14 @@ class ProcessRunner(object):
             stderr_reader.start();
             stdout_reader.join();
             stderr_reader.join();
-            process.wait();
         except:
             try:
                 process.terminate();
             except Exception:
                 pass
             raise
+        finally:
+            process.wait();
         return process.returncode,stdout_sio.getvalue(),stderr_sio.getvalue()
 
 def _parse_event(line):
@@ -150,15 +152,77 @@ class TemporaryFile(object):
 class StreamNotifier(object):
     def __init__(self,stream):
         self.stream = stream
-    def update_major(self,minor_levels = 0):
+        self.done = False
+    def update_major(self,minor_levels = 0, raise_if_canceled = True):
         pass
-    def update_minor(self):
+    def update_minor(self,raise_if_canceled = True):
         pass
     def set_major_text(self,text):
         print(text,file=self.stream)
     def set_minor_text(self,text):
         print("\t"+text,file=self.stream)
-class ShenidamFileProcessor:
+class CanceledException(Exception):
+    pass
+def filename_from_pattern(i,filename,pattern):
+    basename = os.path.basename(filename)
+    basename_noext,ext = os.path.splitext(basename)
+    dirname = os.path.dirname(filename)
+    if dirname == "":
+        dirname="."
+    def repl(matchobj):
+        x = str(i)
+        if (matchobj.group(1) is None):
+            return x
+        n = int(matchobj.group(1))
+        for j in range(len(x),n):
+            x = '0'+x
+        return x
+    pattern = re.sub(NUM_PATTERN,repl,pattern)
+    pattern = re.sub(BASENAME_PATTERN,basename,pattern)
+    pattern = re.sub(BASENAME_NOEXT_PATTERN,basename_noext,pattern)
+    pattern = re.sub(DIRNAME_PATTERN,dirname,pattern)
+    pattern = re.sub(EXT_PATTERN,ext,pattern)
+    return pattern
+class CancelableProgressNotifier(object):
+    def __init__(self,queue,num_major_levels):
+        self.queue = queue
+        self.canceled = False
+        self.current_major_label = ""
+        self.current_major_level = -1
+        self.current_minor_level = 0
+        self.num_major_levels = num_major_levels
+        self.num_minor_levels = 0
+        self.minor_level_streak = 1.0/num_major_levels
+        self.done = False
+    def update_major(self,minor_levels = 0,raise_if_canceled = True):
+        if raise_if_canceled and self.cancelled:
+            raise CanceledException()
+        self.current_major_label = ""
+        self.current_major_level+=1
+        self.num_minor_levels = num_minor_levels
+        self.current_minor_level = 0
+        x = self.current_major_level / self.num_major_levels
+        if x>1:
+            x=1
+        self.queue.put(("level",x))
+    def update_minor(self,raise_if_canceled = True):
+        if raise_if_canceled and self.cancelled:
+            raise CanceledException()
+        if self.current_major_level < 0:
+            self.current_major_level = 0
+        self.current_minor_level += 1
+        x = self.current_major_level / self.num_major_levels + (self.current_minor_level / self.self.num_minor_levels)*self.minor_level_streak
+        if x>1:
+            x=1
+        self.queue.put(("level",x))
+    def set_major_text(self,text):
+        self.current_major_label = text
+        self.queue.put(("text",text))
+    def set_minor_text(self,text):
+        self.queue.put(("text",self.current_major_text + " - " + text))
+    def cancel(self):
+        self.canceled = True
+class ShenidamFileProcessor(object):
     def __init__(self,model,notifier):
         self.base_fn = model.base_fn
         self.input_tracks = model.input_tracks
@@ -179,7 +243,7 @@ class ShenidamFileProcessor:
     def shenidam_updater(self,line,event):
         if event["MESSAGE"] in ("base-read","track-read","track-position-determined","wrote-file"):
             assert self.num_converted < len(self.input_tracks)
-            self.notifier.update_minor()
+            self.notifier.update_minor(raise_if_canceled = False)
             if event["MESSAGE"]=="base-read":
                 self.notifier.set_minor_text("Base file processed")
             elif event["MESSAGE"]=="track-read":
@@ -190,86 +254,58 @@ class ShenidamFileProcessor:
                 self.notifier.set_minor_text("Track '{0}' exported ".format(self.input_tracks[self.num_converted]))
                 self.num_converted+=1
     def convert(self):
-        
-        base = self.base_fn
-        if self.transcode_base:
-            base = create_temporary_file_name()
-        with TemporaryFile([base],self.transcode_base):
-            
-            
-            shenidam_e = Shenidam(self.shenidam)
-            transcoding_required = [not shenidam_e.can_open(x) for x in self.input_tracks]
-            input_fns_with_needs_transcoding = [((self.create_temporary_file_name() if transcoding_required[i] else x),transcoding_required[i]) for (i,x) in enumerate(self.input_tracks)]
-            input_transcoded_fns = [x for (x,y) in input_fns_with_needs_transcoding if y]
-            input_fns = [x for (x,y) in input_fns_with_needs_transcoding]
-            input_fns_to_transcode = [x for (i,x) in enumerate(self.input_tracks) if transcoding_required[i]]
-            
-            
-            
-            
-            self.notifier.update_major()#1 Transcoding base:
-            
+        try:
+            base = self.base_fn
             if self.transcode_base:
-                self.notfier.set_major_text("Transcoding base")
-                self.extract_audio(self.base_fn,base)
-            
-            with TemporaryFile(input_transcoded_fns):
-                
-                output_temp_files = [self.create_temporary_file_name() for x in self.input_tracks]
-                self.notifier.update_major(len(input_fns_to_transcode))#2 Extracting audio:
-                if len(input_fns_to_transcode):
-                    self.notifier.set_major_text("Extracting audio")
-                for x,y in zip(input_fns_to_transcode,input_transcoded_fns):
-                    self.notifier.update_minor()
-                    self.notifier.set_minor_text("Extracting audio of file '{0}'".format(x))
-                    self.extract_audio(x,y)
-                    
-                with TemporaryFile(output_temp_files):
-                    self.notifier.update_major(len(input_fns_to_transcode)*3+1)#3 Running shenidam:
-                    self.notifier.set_major_text("Running shenidam")
-                    self.run_shenidam(base,input_fns,output_temp_files)
-                    
-                    delete_filenames([base],self.transcode_base)
-                    delete_filenames(input_transcoded_fns)
-                    output_remixed_files = [[self.filename_from_pattern(ix[0],ix[1],output_pattern) for ix in enumerate(self.input_tracks)] for (output_pattern,d1,d2) in self.output_params]
-                    remixed_temp_files = [[self.create_temporary_file_name()+"."+os.path.basename(x) for x in y] for y in output_remixed_files]
-                    remixed_temp_files_all = [item for sublist in remixed_temp_files for item in sublist]
-                    with TemporaryFile(remixed_temp_files_all):
-                        self.notifier.update_major(len(self.output_params)*len(self.input_tracks))#4 remixing audio
-                        self.notifier.set_major_text("Remixing audio")
-                        for i,(output_pattern,audio_only,audio_remix_params) in enumerate(self.output_params):
-                            for input_av,audio,temp_output_av in zip(self.input_tracks,output_temp_files,remixed_temp_files[i]):
-                                self.notifier.update_minor()
-                                self.notifier.set_minor_text("Remixing file '{0}'".format(input_av))
-                                self.remix_audio(input_av,audio,temp_output_av,audio_only,audio_remix_params)
-                        delete_filenames(output_temp_files)
-                        self.notifier.update_major(len(self.output_params)*len(self.input_tracks))#4 copying result
-                        self.notifier.set_major_text("Copying result")
-                        for i in range(len(output_remixed_files)):
-                            for output_av,temp_output_av in zip(output_remixed_files[i],remixed_temp_files[i]):
-                                self.notifier.update_minor()
-                                self.notifier.set_minor_text("Copying file '{0}'".format(output_av))
-                                shutil.move(temp_output_av,output_av)
-    def filename_from_pattern(self,i,filename,pattern):
-        basename = os.path.basename(filename)
-        basename_noext,ext = os.path.splitext(basename)
-        dirname = os.path.dirname(filename)
-        if dirname == "":
-            dirname="."
-        def repl(matchobj):
-            x = str(i)
-            if (matchobj.group(1) is None):
-                return x
-            n = int(matchobj.group(1))
-            for j in range(len(x),n):
-                x = '0'+x
-            return x
-        pattern = re.sub(NUM_PATTERN,repl,pattern)
-        pattern = re.sub(BASENAME_PATTERN,basename,pattern)
-        pattern = re.sub(BASENAME_NOEXT_PATTERN,basename_noext,pattern)
-        pattern = re.sub(DIRNAME_PATTERN,dirname,pattern)
-        pattern = re.sub(EXT_PATTERN,ext,pattern)
-        return pattern
+                base = create_temporary_file_name()
+            with TemporaryFile([base],self.transcode_base):
+                shenidam_e = Shenidam(self.shenidam)
+                transcoding_required = [not shenidam_e.can_open(x) for x in self.input_tracks]
+                input_fns_with_needs_transcoding = [((self.create_temporary_file_name() if transcoding_required[i] else x),transcoding_required[i]) for (i,x) in enumerate(self.input_tracks)]
+                input_transcoded_fns = [x for (x,y) in input_fns_with_needs_transcoding if y]
+                input_fns = [x for (x,y) in input_fns_with_needs_transcoding]
+                input_fns_to_transcode = [x for (i,x) in enumerate(self.input_tracks) if transcoding_required[i]]
+                self.notifier.update_major()#1 Transcoding base:
+                if self.transcode_base:
+                    self.notfier.set_major_text("Transcoding base")
+                    self.extract_audio(self.base_fn,base)
+                with TemporaryFile(input_transcoded_fns):
+                    output_temp_files = [self.create_temporary_file_name() for x in self.input_tracks]
+                    self.notifier.update_major(len(input_fns_to_transcode))#2 Extracting audio:
+                    if len(input_fns_to_transcode):
+                        self.notifier.set_major_text("Extracting audio")
+                    for x,y in zip(input_fns_to_transcode,input_transcoded_fns):
+                        self.notifier.update_minor()
+                        self.notifier.set_minor_text("Extracting audio of file '{0}'".format(x))
+                        self.extract_audio(x,y)
+                    with TemporaryFile(output_temp_files):
+                        self.notifier.update_major(len(input_fns_to_transcode)*3+1)#3 Running shenidam:
+                        self.notifier.set_major_text("Running shenidam")
+                        self.run_shenidam(base,input_fns,output_temp_files)
+                        delete_filenames([base],self.transcode_base)
+                        delete_filenames(input_transcoded_fns)
+                        output_remixed_files = [[filename_from_pattern(ix[0],ix[1],output_pattern) for ix in enumerate(self.input_tracks)] for (output_pattern,d1,d2) in self.output_params]
+                        remixed_temp_files = [[self.create_temporary_file_name()+"."+os.path.basename(x) for x in y] for y in output_remixed_files]
+                        remixed_temp_files_all = [item for sublist in remixed_temp_files for item in sublist]
+                        with TemporaryFile(remixed_temp_files_all):
+                            self.notifier.update_major(len(self.output_params)*len(self.input_tracks))#4 remixing audio
+                            self.notifier.set_major_text("Remixing audio")
+                            for i,(output_pattern,audio_only,audio_remix_params) in enumerate(self.output_params):
+                                for input_av,audio,temp_output_av in zip(self.input_tracks,output_temp_files,remixed_temp_files[i]):
+                                    self.notifier.update_minor()
+                                    self.notifier.set_minor_text("Remixing file '{0}'".format(input_av))
+                                    self.remix_audio(input_av,audio,temp_output_av,audio_only,audio_remix_params)
+                            delete_filenames(output_temp_files)
+                            self.notifier.update_major(len(self.output_params)*len(self.input_tracks))#5 copying result
+                            self.notifier.set_major_text("Copying result")
+                            for i in range(len(output_remixed_files)):
+                                for output_av,temp_output_av in zip(output_remixed_files[i],remixed_temp_files[i]):
+                                    self.notifier.update_minor()
+                                    self.notifier.set_minor_text("Copying file '{0}'".format(output_av))
+                                    shutil.move(temp_output_av,output_av)
+        finally:
+            self.notifier.done=True
+    
 
     def raise_subprocess_error(self,cmd,stderr,show_error=True):
         raise SubprocessError("Command '{cmd}' failed{error}".format(cmd=cmd,error=(", error stream was:\n"+stderr) if show_error else ""))
@@ -315,5 +351,32 @@ class FileProcessorModel(object):
     def __init__(self):
         self.output_params=[["{dir}/{base}.shenidam.mkv}",False,"-vcodec copy -acodec copy"]]
         self.input_tracks = []
-
-    
+class ModelException(Exception):
+    pass
+def check_file_write(path):
+    if os.path.isdir(path):
+        raise ModelException("'"+path+"' is a directory")
+    if not os.access(path,os.F_OK):
+        path = os.path.dirname(path)
+        if not path:
+            path = "."
+    if not os.access(path,os.W_OK):
+        raise ModelException("Cannot write file '"+path+"'")
+def check_file_read(path):
+    if os.path.isdir(path):
+        raise ModelException("'"+path+"' is a directory")
+    if not os.access(path,os.R_OK):
+        raise ModelException("Cannot read file '"+path+"'")
+def check_model(model):
+    check_file_read(model.base_fn)
+    for x in model.input_tracks:
+        check_file_read(x)
+    for y,d1,d2 in model.output_params:
+        for i,x in enumerate(model.input_tracks):
+            check_file_write(filename_from_pattern(i,x,y))
+    if not os.path.isdir(model.tmp_dir) and not os.access(model.tmp_dir,os.W_OK):
+        raise ModelException("Cannot read temporary directory '"+model.tmp_dir+"'")
+    if subprocess.call(shlex.split(model.ffmpeg + " -version"),stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False):
+        raise ModelException("Cannot run ffmpeg. Check path.")
+    if subprocess.call(shlex.split(model.shenidam +" --shenidam-return-only"),stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False):
+        raise ModelException("Cannot run shenidam. Check path.")
