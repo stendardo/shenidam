@@ -162,7 +162,7 @@ class ShenidamFileProcessor:
     def __init__(self,model,notifier):
         self.base_fn = model.base_fn
         self.input_tracks = model.input_tracks
-        self.output_patterns_with_audio_only_flag_and_remix_params = model.output_patterns_with_audio_only_flag_and_remix_params
+        self.output_params = model.output_params
         self.transcode_base = model.transcode_base if model.transcode_base is not None else not Shenidam(shenidam).can_open(base_fn)
         self.tmp_dir = model.tmp_dir
         self.shenidam = model.shenidam
@@ -231,19 +231,19 @@ class ShenidamFileProcessor:
                     
                     delete_filenames([base],self.transcode_base)
                     delete_filenames(input_transcoded_fns)
-                    output_remixed_files = [[self.filename_from_pattern(ix[0],ix[1],output_pattern) for ix in enumerate(self.input_tracks)] for (output_pattern,d1,d2) in self.output_patterns_with_audio_only_flag_and_remix_params]
+                    output_remixed_files = [[self.filename_from_pattern(ix[0],ix[1],output_pattern) for ix in enumerate(self.input_tracks)] for (output_pattern,d1,d2) in self.output_params]
                     remixed_temp_files = [[self.create_temporary_file_name()+"."+os.path.basename(x) for x in y] for y in output_remixed_files]
                     remixed_temp_files_all = [item for sublist in remixed_temp_files for item in sublist]
                     with TemporaryFile(remixed_temp_files_all):
-                        self.notifier.update_major(len(self.output_patterns_with_audio_only_flag_and_remix_params)*len(self.input_tracks))#4 remixing audio
+                        self.notifier.update_major(len(self.output_params)*len(self.input_tracks))#4 remixing audio
                         self.notifier.set_major_text("Remixing audio")
-                        for i,(output_pattern,audio_only,audio_remix_params) in enumerate(self.output_patterns_with_audio_only_flag_and_remix_params):
+                        for i,(output_pattern,audio_only,audio_remix_params) in enumerate(self.output_params):
                             for input_av,audio,temp_output_av in zip(self.input_tracks,output_temp_files,remixed_temp_files[i]):
                                 self.notifier.update_minor()
                                 self.notifier.set_minor_text("Remixing file '{0}'".format(input_av))
                                 self.remix_audio(input_av,audio,temp_output_av,audio_only,audio_remix_params)
                         delete_filenames(output_temp_files)
-                        self.notifier.update_major(len(self.output_patterns_with_audio_only_flag_and_remix_params)*len(self.input_tracks))#4 copying result
+                        self.notifier.update_major(len(self.output_params)*len(self.input_tracks))#4 copying result
                         self.notifier.set_major_text("Copying result")
                         for i in range(len(output_remixed_files)):
                             for output_av,temp_output_av in zip(output_remixed_files[i],remixed_temp_files[i]):
@@ -313,7 +313,7 @@ class FileProcessorModel(object):
     verbose=False
     base_fn = None
     def __init__(self):
-        self.output_patterns_with_audio_only_flag_and_remix_params=[["{dir}/{base}.shenidam.mkv}",False,"-vcodec copy -acodec copy"]]
+        self.output_params=[["{dir}/{base}.shenidam.mkv}",False,"-vcodec copy -acodec copy"]]
         self.input_tracks = []
 
     

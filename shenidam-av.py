@@ -147,7 +147,7 @@ def parse_params(model):
         model.input_tracks.append(argv[j].strip())
     if audio_remix_params is None:
         audio_remix_params = "-vcodec copy -acodec copy" if not audio_only else "-acodec copy"
-    model.output_patterns_with_audio_only_flag_and_remix_params = [[output_pattern,audio_only,audio_remix_params]]
+    model.output_params = [[output_pattern,audio_only,audio_remix_params]]
     return 0;
 def error(str):
     return print(str,file=sys.stderr)
@@ -160,7 +160,7 @@ def check_params(model):
     if len(model.input_tracks) == 0:
         error("ERROR: No tracks defined.")
         return 1;
-    op = model.output_patterns_with_audio_only_flag_and_remix_params[0][0]
+    op = model.output_params[0][0]
     if op is None or len(op) == 0:
         error("ERROR: No output defined.")
         return 1;
