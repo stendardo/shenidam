@@ -181,7 +181,6 @@ typedef union
 	int* int_ptr;
 	long* long_ptr;
 	long long* long_long_ptr;
-	float* single_ptr;
 	double* double_ptr;
 } polymorph_ptr;
 
@@ -189,7 +188,11 @@ static int convert_to_samples(int format,void* samples_in,size_t num_samples,sam
 {
 	*samples_out = (sample_d*) ehmalloc(sizeof(sample_d)*num_samples);
 	sample_d* s_out = *samples_out;
-
+    if (format == FORMAT_SINGLE)
+    {
+        memcpy(s_out,samples_in,sizeof(sample_d)*num_samples);
+        return 0;
+    }
 	#define PROCESS_TYPE_F(tid,type,mem) case(tid): cur.mem = (type*)samples_in; for(size_t i = 0; i < num_samples;i++){s_out[i]=(sample_d)(*cur.mem++);}break;
 	polymorph_ptr cur;
 	switch (format)
@@ -199,7 +202,6 @@ static int convert_to_samples(int format,void* samples_in,size_t num_samples,sam
 		PROCESS_TYPE_F(FORMAT_INT,int,int_ptr)
 		PROCESS_TYPE_F(FORMAT_LONG,long,long_ptr)
 		PROCESS_TYPE_F(FORMAT_LONG_LONG,long long,long_long_ptr)
-		PROCESS_TYPE_F(FORMAT_SINGLE,float,single_ptr)
 		PROCESS_TYPE_F(FORMAT_DOUBLE,double,double_ptr)
 	default:
 		free(s_out);
@@ -275,7 +277,6 @@ int shenidam_add_frequential_filter(shenidam_t shenidam,frequential_filter_cb ca
 	res->frequential_filter_data[n]=data;
 	return SUCCESS;
 }
-const double SAMPLE_RATE = 16000;
 int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,size_t num_samples,double sample_rate)
 {
 
