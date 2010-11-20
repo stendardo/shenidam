@@ -32,7 +32,8 @@ except ImportError:
     import queue as squeue
 
 def launch(model):
-    global done,error
+    global done,error,canceled
+    canceled = False
     queue = squeue.Queue()
     notifier = shenidam.CancelableProgressNotifier(queue,5)
     fileprocessor = shenidam.ShenidamFileProcessor(model,notifier)
@@ -40,35 +41,52 @@ def launch(model):
     progress.setAutoClose(False)
     error = None
     done = False
+    def on_cancel():
+        global canceled
+        canceled = True
     def run():
         global done,error
         try:
             fileprocessor.convert()
         except shenidam.CanceledException:
-            pass
-        except Exception as e:
+            print("Canceled")
+        except BaseException as e:
             error = str(e)
         finally:
             done = True
     thread = threading.Thread(target=run)
     
+    progress.canceled.disconnect()
+    progress.canceled.connect(on_cancel)
+    
     progress.setModal(True)
     progress.show()
     thread.start()
+    exception = None
+    
     
     while(not done):
-        application.processEvents()
-        if progress.wasCanceled():
-            notifier.cancel()
         try:
-            x,y = queue.get(False)
-            if x == "level":
-                progress.setValue(int(round(y*100)))
-                progress.setLabelText("")
-            elif x == "text":
-                progress.setLabelText(y)
-        except squeue.Empty:
-            pass
+            application.processEvents()
+            if canceled:
+                progress.setLabelText("Aborting")
+                progress.setCancelButton(None)
+                notifier.cancel()
+            try:
+                x,y = queue.get(False)
+                if x == "level":
+                    progress.setValue(int(round(y*100)))
+                    progress.setLabelText("")
+                elif x == "text":
+                    progress.setLabelText(y)
+            except squeue.Empty:
+                pass
+        except (KeyboardInterrupt,SystemExit) as e:
+            notifier.cancel()
+            exception = e
+    
+    if exception is not None:
+        raise exception
         
     if error is not None:
         message_box = QtGui.QMessageBox()
@@ -187,7 +205,7 @@ class MultipleFileSelectionBox(QtGui.QWidget):
     def remove(self):
         
         i = self.list_box.currentRow()
-        if self.list_box.count():
+        if self.list_box.count() == 0:
             return
         self.list_box.takeItem(i)
     def add(self):
@@ -303,6 +321,10 @@ class Frame(QtGui.QWidget):
         vbox.addWidget(self.tabs)
         vbox.addLayout(hbox)
         self.setLayout(vbox)
+        self.timer = QtCore.QTimer()
+        self.timer.timeout.connect(self.keep_alive)
+        self.timer.start(100)
+        
     def edit_prefs(self):
         self.prefs.exec_()
     def run(self):
@@ -320,6 +342,8 @@ class Frame(QtGui.QWidget):
             message_box.exec_()
             return
         launch(model)
+    def keep_alive(self):
+        return
 def get_qshenidam_file_name():
     return os.path.join(os.path.expanduser("~"),".qshenidam.cfg")
 class PreferencesWindow(QtGui.QDialog):

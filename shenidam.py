@@ -28,6 +28,10 @@ import os.path
 import shutil
 import tempfile
 try:
+    import Queue as squeue
+except ImportError:
+    import queue as squeue
+try:
     import cStringIO as StringIO
 except ImportError:
     import StringIO
@@ -47,9 +51,10 @@ def forward(stream):
         stream.write(line)
     return inner
 class StreamReader(threading.Thread):
-    def __init__(self,callbacks,stream):
+    def __init__(self,callbacks,stream,queue):
         self.callbacks = callbacks
         self.stream = stream
+        self.queue = queue
         super(StreamReader,self).__init__()
     def run(self):
         try:
@@ -58,33 +63,36 @@ class StreamReader(threading.Thread):
                 for callback in self.callbacks:
                     callback(line)
                 line = self.stream.readline();
-        except KeyboardInterrupt:
-            threading.current_thread().interrupt_main()
+        except BaseException as e:
+            self.queue.put(e)
 class ProcessRunner(object):
-    def __init__(self,command,stdout_callback=do_nothing,stderr_callback=do_nothing):
+    def __init__(self,command,stdout_callback=do_nothing,stderr_callback=do_nothing,periodic_notifier=do_nothing):
         self.command = command
         self.stdout_callback = stdout_callback
         self.stderr_callback = stderr_callback
+        self.periodic_notifier = periodic_notifier
     def __call__(self):
         stdout_sio = StringIO.StringIO()
         stderr_sio = StringIO.StringIO()
         process = None
+        exception_queue = squeue.Queue()
         try:
             process = subprocess.Popen(shlex.split(self.command),bufsize=1,stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False)
-            stdout_reader = StreamReader([forward(stdout_sio),self.stdout_callback],process.stdout)
-            stderr_reader = StreamReader([forward(stderr_sio),self.stderr_callback],process.stderr)
+            stdout_reader = StreamReader([forward(stdout_sio),self.stdout_callback],process.stdout,exception_queue)
+            stderr_reader = StreamReader([forward(stderr_sio),self.stderr_callback],process.stderr,exception_queue)
             stdout_reader.start();
             stderr_reader.start();
-            stdout_reader.join();
-            stderr_reader.join();
+            while process.poll() is None:
+                try:
+                    exception = exception_queue.get(timeout=0.1)
+                except squeue.Empty:
+                    pass
+                else:
+                    raise exception
+                self.periodic_notifier()
         except:
-            try:
-                process.terminate();
-            except Exception:
-                pass
+            process.terminate();
             raise
-        finally:
-            process.wait();
         return process.returncode,stdout_sio.getvalue(),stderr_sio.getvalue()
 
 def _parse_event(line):
@@ -104,7 +112,7 @@ def message_handler_print(stream):
         stream.write(line)
     return inner
 class Shenidam(object):
-    def __init__(self,executable,extra_args="",message_callback=do_nothing,error_callback=forward(sys.stderr)):
+    def __init__(self,executable,extra_args="",message_callback=do_nothing,error_callback=forward(sys.stderr),periodic_notifier=do_nothing):
         def mycallback(line):
             if line.startswith("MESSAGE:"):
                 return message_callback(line,_parse_event(line))
@@ -112,6 +120,7 @@ class Shenidam(object):
         self.executable = executable
         self.extra_args = extra_args
         self.error_callback = error_callback
+        self.periodic_notifier = periodic_notifier
     def __call__(self,base,input_tracks,output_tracks):
         if len(input_tracks) <= 0:
             raise ValueError("No input tracks")
@@ -125,7 +134,7 @@ class Shenidam(object):
             for x in output_tracks:
                 args+= "\"{0}\" ".format(x)
         cmd = "{executable} -m {extra_args} -n {numargs} -b \"{base}\" {args}".format(executable=self.executable,base=base,numargs=len(input_tracks),args=args,extra_args=self.extra_args)
-        res,stdout,stderr = ProcessRunner(cmd,self.output_callback,self.error_callback)()
+        res,stdout,stderr = ProcessRunner(cmd,self.output_callback,self.error_callback,self.periodic_notifier)()
         return cmd,res,stdout,stderr
     def can_open(self,filename):
         cmd = "{executable} -b \"{filename}\" -c".format(executable=self.executable,filename=filename)
@@ -154,6 +163,7 @@ class StreamNotifier(object):
     def __init__(self,stream):
         self.stream = stream
         self.done = False
+        self.canceled = False
     def update_major(self,minor_levels = 0, raise_if_canceled = True):
         pass
     def update_minor(self,raise_if_canceled = True):
@@ -162,6 +172,10 @@ class StreamNotifier(object):
         print(text,file=self.stream)
     def set_minor_text(self,text):
         print("\t"+text,file=self.stream)
+    def cancel(self):
+        pass
+    def refresh(self):
+        pass
 class CanceledException(Exception):
     pass
 def filename_from_pattern(i,filename,pattern):
@@ -224,6 +238,9 @@ class CancelableProgressNotifier(object):
         self.queue.put(("text",self.current_major_label))
     def set_minor_text(self,text):
         self.queue.put(("text",self.current_major_label + " - " + text))
+    def refresh(self):
+        if self.canceled:
+            raise CanceledException()
     def cancel(self):
         self.canceled = True
 class ShenidamFileProcessor(object):
@@ -247,7 +264,7 @@ class ShenidamFileProcessor(object):
     def shenidam_updater(self,line,event):
         if event["MESSAGE"] in ("base-read","track-read","track-position-determined","wrote-file"):
             assert self.num_converted < len(self.input_tracks)
-            self.notifier.update_minor(raise_if_canceled = False)
+            self.notifier.update_minor()
             if event["MESSAGE"]=="base-read":
                 self.notifier.set_minor_text("Base file processed")
             elif event["MESSAGE"]=="track-read":
@@ -261,7 +278,7 @@ class ShenidamFileProcessor(object):
         try:
             base = self.base_fn
             if self.transcode_base:
-                base = create_temporary_file_name()
+                base = self.create_temporary_file_name()
             with TemporaryFile([base],self.transcode_base):
                 shenidam_e = Shenidam(self.shenidam)
                 transcoding_required = [not shenidam_e.can_open(x) for x in self.input_tracks]
@@ -317,7 +334,7 @@ class ShenidamFileProcessor(object):
         try:
             stderr_forward = forward(sys.stderr) if self.verbose else do_nothing;
             
-            res,stdout,stderr = ProcessRunner(cmd,stderr_forward,stderr_forward)()
+            res,stdout,stderr = ProcessRunner(cmd,stderr_forward,stderr_forward,self.notifier.refresh)()
             if res != 0:
                 self.raise_subprocess_error(cmd,stderr)
         except OSError as e:
@@ -330,7 +347,7 @@ class ShenidamFileProcessor(object):
             self.num_converted = 0
             stderr_forward = forward(sys.stderr) if self.verbose else do_nothing;
             message_handler = self.shenidam_updater
-            cmd,res,stdin,stderr = Shenidam(self.shenidam,self.shenidam_extra_args,message_handler,stderr_forward)(base_fn,track_fns,output_fns)
+            cmd,res,stdin,stderr = Shenidam(self.shenidam,self.shenidam_extra_args,message_handler,stderr_forward,self.notifier.refresh)(base_fn,track_fns,output_fns)
             if res != 0:
                 self.raise_subprocess_error(cmd,stderr)
         except OSError as e:
