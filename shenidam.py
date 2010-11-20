@@ -17,7 +17,8 @@
     along with Shenidam.  If not, see <http://www.gnu.org/licenses/>.
 
 """
-from __future__ import print_function,division
+from __future__ import print_function
+from __future__ import division
 import threading
 import sys
 import re
@@ -195,31 +196,34 @@ class CancelableProgressNotifier(object):
         self.minor_level_streak = 1.0/num_major_levels
         self.done = False
     def update_major(self,minor_levels = 0,raise_if_canceled = True):
-        if raise_if_canceled and self.cancelled:
+        if raise_if_canceled and self.canceled:
             raise CanceledException()
         self.current_major_label = ""
         self.current_major_level+=1
-        self.num_minor_levels = num_minor_levels
+        self.num_minor_levels = minor_levels+1
         self.current_minor_level = 0
         x = self.current_major_level / self.num_major_levels
         if x>1:
             x=1
         self.queue.put(("level",x))
     def update_minor(self,raise_if_canceled = True):
-        if raise_if_canceled and self.cancelled:
+        if raise_if_canceled and self.canceled:
             raise CanceledException()
         if self.current_major_level < 0:
             self.current_major_level = 0
         self.current_minor_level += 1
-        x = self.current_major_level / self.num_major_levels + (self.current_minor_level / self.self.num_minor_levels)*self.minor_level_streak
+        if self.num_minor_levels != 0:
+            x = self.current_major_level / self.num_major_levels + (self.current_minor_level / self.num_minor_levels)*self.minor_level_streak
+        else:
+            x = self.current_major_level / self.num_major_levels
         if x>1:
             x=1
         self.queue.put(("level",x))
     def set_major_text(self,text):
         self.current_major_label = text
-        self.queue.put(("text",text))
+        self.queue.put(("text",self.current_major_label))
     def set_minor_text(self,text):
-        self.queue.put(("text",self.current_major_text + " - " + text))
+        self.queue.put(("text",self.current_major_label + " - " + text))
     def cancel(self):
         self.canceled = True
 class ShenidamFileProcessor(object):
@@ -227,7 +231,7 @@ class ShenidamFileProcessor(object):
         self.base_fn = model.base_fn
         self.input_tracks = model.input_tracks
         self.output_params = model.output_params
-        self.transcode_base = model.transcode_base if model.transcode_base is not None else not Shenidam(shenidam).can_open(base_fn)
+        self.transcode_base = model.transcode_base if model.transcode_base is not None else not Shenidam(model.shenidam).can_open(model.base_fn)
         self.tmp_dir = model.tmp_dir
         self.shenidam = model.shenidam
         self.ffmpeg = model.ffmpeg
@@ -279,7 +283,7 @@ class ShenidamFileProcessor(object):
                         self.notifier.set_minor_text("Extracting audio of file '{0}'".format(x))
                         self.extract_audio(x,y)
                     with TemporaryFile(output_temp_files):
-                        self.notifier.update_major(len(input_fns_to_transcode)*3+1)#3 Running shenidam:
+                        self.notifier.update_major(len(input_fns)*3+1)#3 Running shenidam:
                         self.notifier.set_major_text("Running shenidam")
                         self.run_shenidam(base,input_fns,output_temp_files)
                         delete_filenames([base],self.transcode_base)
@@ -315,7 +319,7 @@ class ShenidamFileProcessor(object):
             
             res,stdout,stderr = ProcessRunner(cmd,stderr_forward,stderr_forward)()
             if res != 0:
-                self.raise_subprocess_error(cmd,stderr,not self.verbose)
+                self.raise_subprocess_error(cmd,stderr)
         except OSError as e:
             self.raise_subprocess_error(cmd,str(e))
     def extract_audio(self,avfilename,outfn):
@@ -324,16 +328,17 @@ class ShenidamFileProcessor(object):
     def run_shenidam(self,base_fn,track_fns,output_fns):
         try:
             self.num_converted = 0
-            self.notifier.update_major()
             stderr_forward = forward(sys.stderr) if self.verbose else do_nothing;
             message_handler = self.shenidam_updater
             cmd,res,stdin,stderr = Shenidam(self.shenidam,self.shenidam_extra_args,message_handler,stderr_forward)(base_fn,track_fns,output_fns)
             if res != 0:
-                self.raise_subprocess_error(cmd,stderr,not self.verbose)
+                self.raise_subprocess_error(cmd,stderr)
         except OSError as e:
             self.raise_subprocess_error(cmd,str(e))
 
     def remix_audio(self,avfilename,track_fn,output_fn,audio_only,audio_remix_params):
+        if audio_remix_params is None or audio_remix_params.strip() == "default":
+            audio_remix_params = "-acodec copy" if audio_only else "-acodec copy -vcodec copy"
         if audio_only:
             self.run_command("{ffmpeg} -y -v 0 -loglevel error -i \"{track_fn}\" {audio_remix_params} \"{output_fn}\"".format(ffmpeg = self.ffmpeg, track_fn=track_fn,output_fn=output_fn,audio_remix_params=audio_remix_params))
         else:
