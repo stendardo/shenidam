@@ -112,6 +112,8 @@ class FileInput(QtGui.QWidget):
         hbox = QtGui.QHBoxLayout()
         hbox.addWidget(self.text_box,1)
         hbox.addWidget(self.button)
+        self.text_box.setMinimumWidth(300)
+        
         vbox = QtGui.QVBoxLayout()
         if label:
             vbox.addWidget(QtGui.QLabel(label))
@@ -143,11 +145,17 @@ class FileInput(QtGui.QWidget):
         self.text_box.setText(text)
     def setText(self,text):
         self.setValue(text)
+class LabelWrapper(QtGui.QWidget):
+    def __init__(self,label):
+        QtGui.QWidget.__init__(self)
+        hbox = QtGui.QHBoxLayout() 
+        hbox.addWidget(QtGui.QLabel(label))
+        self.setLayout(hbox)
 class TextBox(QtGui.QWidget):
     def __init__(self,label,value="",direction=QtGui.QBoxLayout.LeftToRight):
         QtGui.QWidget.__init__(self)
         self.text_box = QtGui.QLineEdit(value)
-        
+        self.text_box.setMinimumWidth(300)
         box = QtGui.QBoxLayout(direction)
         if label:
             box.addWidget(QtGui.QLabel(label))
@@ -172,10 +180,12 @@ class MultipleFileSelectionBox(QtGui.QWidget):
         vbox1 = QtGui.QVBoxLayout()
         vbox2 = QtGui.QVBoxLayout()
         vbox1.addWidget(self.list_box,1)
+        self.list_box.setMinimumWidth(600)
         vbox2.addWidget(self.b_add)
         vbox2.addWidget(self.b_del)
         vbox2.addWidget(self.b_up)
         vbox2.addWidget(self.b_down)
+        vbox2.addStretch(1)
         hbox = QtGui.QHBoxLayout()
         
         hbox.addLayout(vbox1,1)
@@ -218,13 +228,15 @@ class TableSelectionBox(QtGui.QWidget):
     def __init__(self):
         QtGui.QWidget.__init__(self)
         self.table = QtGui.QTableWidget()
-        self.b_add = QtGui.QPushButton("Add File")
-        self.b_del = QtGui.QPushButton("Remove File")
+        self.table.setMinimumWidth(600)
+        self.b_add = QtGui.QPushButton("Add Output")
+        self.b_del = QtGui.QPushButton("Remove Output")
         vbox1 = QtGui.QVBoxLayout()
         vbox2 = QtGui.QVBoxLayout()
         vbox1.addWidget(self.table,1)
         vbox2.addWidget(self.b_add)
         vbox2.addWidget(self.b_del)
+        vbox2.addStretch(1)
         hbox = QtGui.QHBoxLayout()
         
         hbox.addLayout(vbox1,1)
@@ -260,15 +272,18 @@ class SingleFileConversionWindow(QtGui.QWidget):
         self.input_field = FileInput("AV-Track to match")
         self.output_field = FileInput("Output file",default_folder=self.input_field.value,file_mode=QtGui.QFileDialog.AnyFile,accept_mode=QtGui.QFileDialog.AcceptSave)
         self.checkbox = QtGui.QCheckBox()
-        self.remix_params_field = TextBox("FFMPEG remix params","default")
+        self.remix_params_field = TextBox("FFMPEG remix parameters","default")
         hbox = QtGui.QHBoxLayout()
         hbox.addWidget(QtGui.QLabel("Audio-only output"))
         hbox.addWidget(self.checkbox)
+        hbox.addStretch(1)
+        cb_wgt = QtGui.QWidget()
+        cb_wgt.setLayout(hbox)
         vbox = QtGui.QVBoxLayout()
         vbox.addWidget(self.base_field)
         vbox.addWidget(self.input_field)
         vbox.addWidget(self.output_field)
-        vbox.addLayout(hbox)
+        vbox.addWidget(cb_wgt)
         vbox.addWidget(self.remix_params_field)
         self.setLayout(vbox)
     def base(self):
@@ -283,15 +298,13 @@ class MultipleFileConversionWindow(QtGui.QWidget):
         self.base_field = FileInput("Base soundtrack")
         self.input_field = MultipleFileSelectionBox()
         self.output_field = TableSelectionBox()
-        self.remix_params_field = TextBox("FFMPEG remix params","default")
         
         vbox = QtGui.QVBoxLayout()
         vbox.addWidget(self.base_field)
-        vbox.addWidget(QtGui.QLabel("AV-Tracks to match"))
+        vbox.addWidget(LabelWrapper("AV-Tracks to match"))
         vbox.addWidget(self.input_field)
-        vbox.addWidget(QtGui.QLabel("Outputs"))
+        vbox.addWidget(LabelWrapper("Outputs"))
         vbox.addWidget(self.output_field)
-        vbox.addWidget(self.remix_params_field)
         self.setLayout(vbox)
     def base(self):
         return self.base_field.value()
@@ -308,7 +321,7 @@ class Frame(QtGui.QWidget):
         self.prefs = PreferencesWindow()
         self.setWindowTitle("QShenidam")
         self.tabs.addTab(self.single,"Simple Mode (Single Track)")
-        self.tabs.addTab(self.multi,"Advanced Mode (Multiple Tracks and outputs)")
+        self.tabs.addTab(self.multi,"Advanced Mode (Multiple Tracks and Outputs)")
         b_prefs = QtGui.QPushButton("Preferences")
         b_run = QtGui.QPushButton("Run")
         b_prefs.clicked.connect(self.edit_prefs)
@@ -336,7 +349,7 @@ class Frame(QtGui.QWidget):
         model.__dict__.update(self.prefs.data())
         try:
             shenidam.check_model(model)
-        except ModelException as e:
+        except shenidam.ModelException as e:
             message_box = QtGui.QMessageBox()
             message_box.setText("ERROR: "+str(e))
             message_box.exec_()
@@ -374,6 +387,7 @@ class PreferencesWindow(QtGui.QDialog):
         vbox.addLayout(grid)
         vbox.addLayout(hbox)
         self.setLayout(vbox)
+        self.load()
     def load(self):
         try:
             with open(get_qshenidam_file_name(),'r')as f:

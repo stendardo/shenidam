@@ -391,6 +391,10 @@ def check_file_read(path):
         raise ModelException("Cannot read file '"+path+"'")
 def check_model(model):
     check_file_read(model.base_fn)
+    if not model.input_tracks:
+        raise ModelException("No input tracks")
+    if not model.output_params:
+        raise ModelException("No output tracks")
     for x in model.input_tracks:
         check_file_read(x)
     for y,d1,d2 in model.output_params:
