@@ -1,0 +1,3 @@
+#!/bin/sh
+export PYTHONPATH=$PYTHONPATH:${SHENIDAM_PYTHON_DIR}
+exec ${PYTHON_EXECUTABLE} ${SHENIDAM_PYTHON_DIR}/qshenidam.py "$@"

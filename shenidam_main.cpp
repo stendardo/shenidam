@@ -19,7 +19,7 @@
  */
 
 
-
+#include "config.h"
 #include "boost/random.hpp"
 #include "boost/foreach.hpp"
 #include "boost/lexical_cast.hpp"
@@ -80,6 +80,7 @@ int num_files = 0;
 double threshold = 1;
 int num_tries = 5;
 bool return_only = false;
+bool version = false;
 boost::mt19937 gen(std::time(0));
 
 
@@ -222,6 +223,10 @@ int parse_options(int argc, char** argv)
 		 {
 			 verbose = true;
 		 }
+		 else if (arg == "-V" || arg == "--version")
+		 {
+			 version = true;
+		 }
 		 else if (arg == "-n" || arg == "--number-tracks")
 		 {
 			 if (i == argc) return 1;
@@ -363,6 +368,7 @@ void usage()
 			"\t-tt\n\t--test-threshold real\n\t\tThreshold for determining critical noise boundary (Default 0.1, less means more precise boundary)\n\n"
 			"\t-ta\n\t--test-track-size real\n\t\tSize in seconds of generated track for test mode (Default 120s, needs to be less than the audio signal's length.)\n\n"
 			"\t-c\n\t--can-open-base\n\t\tTest to see if the base can be opened (and return a non-zero value if not)\n\n"
+			"\t-V\n\t--version\n\t\tPrint shenidam version and return success\n\n"
 			"\t-r\n\t--shenidam-return-only\n\t\tDo nothing and return success (check and see if the executable works)\n\n");
 
 }
@@ -560,6 +566,11 @@ int main(int argc, char **argv) {
 	}
 	if (return_only)
 	{
+	    return 0;
+	}
+	if (version)
+	{
+	    std::cout << "Shenidam Version : shenidam-"<< SHENIDAM_VERSION << std::endl;
 	    return 0;
 	}
 	bool has_output = test || send_messages || default_output || out_tracks.size() || can_open_mode;
