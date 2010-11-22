@@ -133,11 +133,11 @@ class Shenidam(object):
             args+= "-o "
             for x in output_tracks:
                 args+= "\"{0}\" ".format(x)
-        cmd = "{executable} -m {extra_args} -n {numargs} -b \"{base}\" {args}".format(executable=self.executable,base=base,numargs=len(input_tracks),args=args,extra_args=self.extra_args)
+        cmd = "\"{executable}\" -m {extra_args} -n {numargs} -b \"{base}\" {args}".format(executable=self.executable,base=base,numargs=len(input_tracks),args=args,extra_args=self.extra_args)
         res,stdout,stderr = ProcessRunner(cmd,self.output_callback,self.error_callback,self.periodic_notifier)()
         return cmd,res,stdout,stderr
     def can_open(self,filename):
-        cmd = "{executable} -b \"{filename}\" -c".format(executable=self.executable,filename=filename)
+        cmd = "\"{executable}\" -b \"{filename}\" -c".format(executable=self.executable,filename=filename)
         return not subprocess.call(shlex.split(cmd),stdin=None,stdout=None,stderr=None,shell=False)
 class SubprocessError(Exception):
     def __init__(self,error):
@@ -250,6 +250,7 @@ class ShenidamFileProcessor(object):
         self.output_params = model.output_params
         self.transcode_base = model.transcode_base if model.transcode_base is not None else not Shenidam(model.shenidam).can_open(model.base_fn)
         self.tmp_dir = model.tmp_dir
+        self.output_tmp_dir = model.output_tmp_dir if model.output_tmp_dir is not None else self.tmp_dir
         self.shenidam = model.shenidam
         self.ffmpeg = model.ffmpeg
         self.shenidam_extra_args = model.shenidam_extra_args
@@ -259,6 +260,8 @@ class ShenidamFileProcessor(object):
         self.quiet = model.quiet
         self.notifier = notifier
         self.audio_export_params = model.audio_export_params
+        self.default_audio_remix_params = model.default_audio_remix_params if model.default_audio_remix_params is not None else "-acodec copy"
+        self.default_av_audio_remix_params = model.default_av_audio_remix_params if model.default_av_audio_remix_params is not None else "-vcodec copy -acodec copy"
     def create_temporary_file_name(self):
         return os.path.join(self.tmp_dir,"shenidam-av-tmp-"+uuid.uuid4().hex)
     def shenidam_updater(self,line,event):
@@ -340,7 +343,7 @@ class ShenidamFileProcessor(object):
         except OSError as e:
             self.raise_subprocess_error(cmd,str(e))
     def extract_audio(self,avfilename,outfn):
-        self.run_command("{exec_} -y -v 0 -loglevel error -i \"{avfilename}\" -vn {audio_export_params} \"{outfn}\"".format(exec_=self.ffmpeg,avfilename=avfilename,outfn=outfn,audio_export_params=self.audio_export_params))
+        self.run_command("\"{exec_}\" -y -v 0 -loglevel error -i \"{avfilename}\" -vn {audio_export_params} \"{outfn}\"".format(exec_=self.ffmpeg,avfilename=avfilename,outfn=outfn,audio_export_params=self.audio_export_params))
 
     def run_shenidam(self,base_fn,track_fns,output_fns):
         try:
@@ -355,11 +358,11 @@ class ShenidamFileProcessor(object):
 
     def remix_audio(self,avfilename,track_fn,output_fn,audio_only,audio_remix_params):
         if audio_remix_params is None or audio_remix_params.strip() == "default":
-            audio_remix_params = "-acodec copy" if audio_only else "-acodec copy -vcodec copy"
+            audio_remix_params = self.default_audio_remix_params if audio_only else self.default_av_audio_remix_params
         if audio_only:
-            self.run_command("{ffmpeg} -y -v 0 -loglevel error -i \"{track_fn}\" {audio_remix_params} \"{output_fn}\"".format(ffmpeg = self.ffmpeg, track_fn=track_fn,output_fn=output_fn,audio_remix_params=audio_remix_params))
+            self.run_command("\"{ffmpeg}\" -y -v 0 -loglevel error -i \"{track_fn}\" {audio_remix_params} \"{output_fn}\"".format(ffmpeg = self.ffmpeg, track_fn=track_fn,output_fn=output_fn,audio_remix_params=audio_remix_params))
         else:
-            self.run_command("{ffmpeg} -y -v 0 -loglevel error -i \"{avfilename}\" -i \"{track_fn}\" -map 0:0 -map 1:0  {audio_remix_params} \"{output_fn}\"".format(ffmpeg = self.ffmpeg, avfilename=avfilename,track_fn=track_fn,output_fn=output_fn,audio_remix_params=audio_remix_params))
+            self.run_command("\"{ffmpeg}\" -y -v 0 -loglevel error -i \"{avfilename}\" -i \"{track_fn}\" -map 0:0 -map 1:0  {audio_remix_params} \"{output_fn}\"".format(ffmpeg = self.ffmpeg, avfilename=avfilename,track_fn=track_fn,output_fn=output_fn,audio_remix_params=audio_remix_params))
 class FileProcessorModel(object):
     audio_export_params="-acodec pcm_s24le -f wav"
     transcode_base = None
@@ -370,8 +373,11 @@ class FileProcessorModel(object):
     quiet=False
     verbose=False
     base_fn = None
+    default_av_audio_remix_params = None
+    default_audio_remix_params = None
+    output_tmp_dir = None
     def __init__(self):
-        self.output_params=[["{dir}/{base}.shenidam.mkv}",False,"-vcodec copy -acodec copy"]]
+        self.output_params=[]
         self.input_tracks = []
 class ModelException(Exception):
     pass
@@ -401,8 +407,10 @@ def check_model(model):
         for i,x in enumerate(model.input_tracks):
             check_file_write(filename_from_pattern(i,x,y))
     if not os.path.isdir(model.tmp_dir) and not os.access(model.tmp_dir,os.W_OK):
-        raise ModelException("Cannot read temporary directory '"+model.tmp_dir+"'")
-    if subprocess.call(shlex.split(model.ffmpeg + " -version"),stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False):
+        raise ModelException("Cannot write to temporary directory '"+model.tmp_dir+"'")
+    if not os.path.isdir(model.output_tmp_dir) and not os.access(model.output_tmp_dir,os.W_OK):
+        raise ModelException("Cannot write to output temporary directory '"+model.output_tmp_dir+"'")
+    if subprocess.call([model.ffmpeg ,"-version"],stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False):
         raise ModelException("Cannot run ffmpeg. Check path.")
-    if subprocess.call(shlex.split(model.shenidam +" --shenidam-return-only"),stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False):
+    if subprocess.call([model.shenidam,"--shenidam-return-only"],stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False):
         raise ModelException("Cannot run shenidam. Check path.")

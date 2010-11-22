@@ -337,8 +337,14 @@ class Frame(QtGui.QWidget):
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.keep_alive)
         self.timer.start(100)
-        
+        if self.prefs.first_time:
+            self.edit_prefs()
     def edit_prefs(self):
+        self.prefs.show()
+        if self.prefs.first_time:
+            messageBox = QtGui.QMessageBox()
+            messageBox.setText("Please check these parameters\nand change them if necessary\n")
+            messageBox.exec_()
         self.prefs.exec_()
     def run(self):
         wgt = self.tabs.currentWidget()
@@ -355,6 +361,7 @@ class Frame(QtGui.QWidget):
             message_box.exec_()
             return
         launch(model)
+        
     def keep_alive(self):
         return
 def get_qshenidam_file_name():
@@ -362,38 +369,63 @@ def get_qshenidam_file_name():
 class PreferencesWindow(QtGui.QDialog):
     def __init__(self):
         QtGui.QWidget.__init__(self)
-        self.tmp_dir_field =  FileInput(None,default_folder=tempfile.gettempdir,set_default_folder=True,file_mode=QtGui.QFileDialog.Directory,accept_mode=QtGui.QFileDialog.AcceptOpen)
-        self.ffmpeg_field =  QtGui.QLineEdit("ffmpeg")
-        self.shenidam_field =  QtGui.QLineEdit("shenidam")
+        self.tmp_dir_field =  FileInput(None,file_mode=QtGui.QFileDialog.Directory,accept_mode=QtGui.QFileDialog.AcceptOpen)
+        self.output_tmp_dir_field = FileInput(None,file_mode=QtGui.QFileDialog.Directory,accept_mode=QtGui.QFileDialog.AcceptOpen)
+        self.ffmpeg_field =  QtGui.QLineEdit("")
+        self.shenidam_field =  QtGui.QLineEdit("")
         self.shenidam_extra_args_field = QtGui.QLineEdit("")
-        self.audio_export_params_field = QtGui.QLineEdit("-acodec pcm_s24le -f wav")
+        self.audio_export_params_field = QtGui.QLineEdit("")
+        self.default_audio_remix_params_field = QtGui.QLineEdit("")
+        self.default_av_audio_remix_params_field = QtGui.QLineEdit("")
         grid = QtGui.QGridLayout()
-        grid.addWidget(QtGui.QLabel("Temporary Directory"),0,0)
-        grid.addWidget(QtGui.QLabel("FFMPEG Executable"),1,0)
-        grid.addWidget(QtGui.QLabel("Shenidam Executable"),2,0)
-        grid.addWidget(QtGui.QLabel("Extra parameters to pass to shenidam"),3,0)
-        grid.addWidget(QtGui.QLabel("Extra parameters to pass to FFMPEG for audio extraction"),4,0)
+        grid.addWidget(QtGui.QLabel("Temporary Directory (should be in RAM if you have enough of it)"),0,0)
+        grid.addWidget(QtGui.QLabel("Output Temporary Directory (Should be optimally on same drive/volume/partition as outputs)"),1,0)
+        grid.addWidget(QtGui.QLabel("FFMPEG Command/Executable"),2,0)
+        grid.addWidget(QtGui.QLabel("Shenidam Command/Executable"),3,0)
+        grid.addWidget(QtGui.QLabel("Extra parameters to pass to shenidam\n(typically working sample rate)"),4,0)
+        grid.addWidget(QtGui.QLabel("Extra parameters to pass to FFMPEG for audio extraction"),5,0)
+        grid.addWidget(QtGui.QLabel("Default parameters to pass to FFMPEG\nfor audio remixing (audio mode)"),6,0)
+        grid.addWidget(QtGui.QLabel("Default parameters to pass to FFMPEG\nfor audio remixing (audio/video mode)"),7,0)
         grid.addWidget(self.tmp_dir_field,0,1)
-        grid.addWidget(self.ffmpeg_field,1,1)
-        grid.addWidget(self.shenidam_field,2,1)
-        grid.addWidget(self.shenidam_extra_args_field,3,1)
-        grid.addWidget(self.audio_export_params_field,4,1)
+        grid.addWidget(self.output_tmp_dir_field,1,1)
+        grid.addWidget(self.ffmpeg_field,2,1)
+        grid.addWidget(self.shenidam_field,3,1)
+        grid.addWidget(self.shenidam_extra_args_field,4,1)
+        grid.addWidget(self.audio_export_params_field,5,1)
+        grid.addWidget(self.default_audio_remix_params_field,6,1)
+        grid.addWidget(self.default_av_audio_remix_params_field,7,1)
         b_close = QtGui.QPushButton("Close and save")
         b_close.clicked.connect(self.close)
+        b_defaults = QtGui.QPushButton("Load Defaults")
+        b_defaults.clicked.connect(self.load_defaults)
         hbox = QtGui.QHBoxLayout()
         hbox.addStretch(1)
+        hbox.addWidget(b_defaults)
         hbox.addWidget(b_close)
         vbox = QtGui.QVBoxLayout()
         vbox.addLayout(grid)
         vbox.addLayout(hbox)
         self.setLayout(vbox)
+        self.load_defaults()
         self.load()
+    def load_defaults(self):
+        self.tmp_dir_field.setText(tempfile.gettempdir())
+        self.output_tmp_dir_field.setText(tempfile.gettempdir())
+        self.ffmpeg_field.setText("ffmpeg")
+        self.shenidam_field.setText("shenidam")
+        self.shenidam_extra_args_field.setText("")
+        self.audio_export_params_field.setText("-acodec pcm_s24le -f wav")
+        self.default_audio_remix_params_field.setText("-acodec copy")
+        self.default_av_audio_remix_params_field.setText("-acodec copy -vcodec copy")
     def load(self):
+        self.first_time = False
         try:
             with open(get_qshenidam_file_name(),'r')as f:
                 d = json.load(f)
                 if "tmp_dir" in d:
                     self.tmp_dir_field.setText(str(d["tmp_dir"]))
+                if "output_tmp_dir" in d:
+                    self.output_tmp_dir_field.setText(str(d["output_tmp_dir"]))
                 if "ffmpeg" in d:
                     self.ffmpeg_field.setText(str(d["ffmpeg"]))
                 if "shenidam" in d:
@@ -402,14 +434,27 @@ class PreferencesWindow(QtGui.QDialog):
                     self.shenidam_extra_args_field.setText(str(d["shenidam_extra_args"]))
                 if "audio_export_params" in d:
                     self.audio_export_params_field.setText(str(d["audio_export_params"]))
+                if "default_audio_remix_params" in d:
+                    self.default_audio_remix_params_field.setText(str(d["default_audio_remix_params"]))
+                if "default_av_audio_remix_params" in d:
+                    self.default_av_audio_remix_params_field.setText(str(d["default_av_audio_remix_params"]))
         except Exception:
-            pass
+            self.first_time = True
     def data(self):
-        return {"tmp_dir":str(self.tmp_dir_field.text()),"ffmpeg":str(self.ffmpeg_field.text()),"shenidam":str(self.shenidam_field.text()),
-        "shenidam_extra_args":str(self.shenidam_extra_args_field.text()),"audio_export_params":str(self.audio_export_params_field.text())}
+        return {
+        "tmp_dir":str(self.tmp_dir_field.text()),
+        "ffmpeg":str(self.ffmpeg_field.text()),
+        "shenidam":str(self.shenidam_field.text()),
+        "shenidam_extra_args":str(self.shenidam_extra_args_field.text()),
+        "audio_export_params":str(self.audio_export_params_field.text()),
+        "output_tmp_dir":str(self.output_tmp_dir_field.text()),
+        "default_audio_remix_params":str(self.default_audio_remix_params_field.text()),
+        "default_av_audio_remix_params":str(self.default_av_audio_remix_params_field.text())
+        }
     def save(self):
         with open(get_qshenidam_file_name(),'w')as f:
             json.dump(self.data(),f)
+            self.first_time = False
     def closeEvent(self,event):
         self.save()
 if __name__ == "__main__":
@@ -418,6 +463,8 @@ if __name__ == "__main__":
     application = QtGui.QApplication(sys.argv)
     frame = Frame()
     frame.show()
+    if os.name == "darwin":
+        frame.raise_()
     def new_excepthook(type,value,traceback):
         application.exit(1)
         sys.__excepthook__(type,value,traceback)
