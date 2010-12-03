@@ -94,6 +94,9 @@ def launch(model):
         message_box.setDetailedText(error)
         message_box.exec_()
     progress.close()
+latest_directory = None
+def get_latest_directory():
+    return latest_directory
 class FileInput(QtGui.QWidget):
     def __init__(self,label,default_folder = None,set_default_folder = False,select_folder = False,file_mode=QtGui.QFileDialog.ExistingFile,accept_mode=QtGui.QFileDialog.AcceptOpen):
         QtGui.QWidget.__init__(self)
@@ -123,9 +126,12 @@ class FileInput(QtGui.QWidget):
         self.accept_mode = accept_mode
         self.button.clicked.connect(self.on_browse)
     def on_browse(self):
+        global latest_directory
         dialog = QtGui.QFileDialog()
         dialog.setFileMode(self.file_mode)
         dialog.setAcceptMode(self.accept_mode)
+        if self.file_mode == QtGui.QFileDialog.Directory:
+            dialog.setOption(QtGui.QFileDialog.ShowDirsOnly)
         value = str(self.value())
         if not value.strip():
             if callable(self.default_folder):
@@ -136,6 +142,7 @@ class FileInput(QtGui.QWidget):
             dialog.setDirectory(value)
 
         if dialog.exec_():
+            latest_directory = os.path.dirname(str(dialog.selectedFiles()[0]))
             self.text_box.setText(dialog.selectedFiles()[0])
     def value(self):
         return str(self.text_box.text())
@@ -219,7 +226,7 @@ class MultipleFileSelectionBox(QtGui.QWidget):
             return
         self.list_box.takeItem(i)
     def add(self):
-        files = QtGui.QFileDialog.getOpenFileNames()
+        files = QtGui.QFileDialog.getOpenFileNames(directory=latest_directory or "")
         for x in files:
             self.list_box.addItem(x)
     def value(self):
@@ -268,9 +275,9 @@ class TableSelectionBox(QtGui.QWidget):
 class SingleFileConversionWindow(QtGui.QWidget):
     def __init__(self):
         QtGui.QWidget.__init__(self)
-        self.base_field = FileInput("Base soundtrack")
-        self.input_field = FileInput("AV-Track to match")
-        self.output_field = FileInput("Output file",default_folder=self.input_field.value,file_mode=QtGui.QFileDialog.AnyFile,accept_mode=QtGui.QFileDialog.AcceptSave)
+        self.base_field = FileInput("Base soundtrack",default_folder=get_latest_directory)
+        self.input_field = FileInput("AV-Track to match",default_folder=get_latest_directory)
+        self.output_field = FileInput("Output file",default_folder=get_latest_directory,file_mode=QtGui.QFileDialog.AnyFile,accept_mode=QtGui.QFileDialog.AcceptSave)
         self.checkbox = QtGui.QCheckBox()
         self.remix_params_field = TextBox("FFMPEG remix parameters","default")
         hbox = QtGui.QHBoxLayout()
@@ -295,7 +302,7 @@ class SingleFileConversionWindow(QtGui.QWidget):
 class MultipleFileConversionWindow(QtGui.QWidget):
     def __init__(self):
         QtGui.QWidget.__init__(self)
-        self.base_field = FileInput("Base soundtrack")
+        self.base_field = FileInput("Base soundtrack",default_folder=get_latest_directory)
         self.input_field = MultipleFileSelectionBox()
         self.output_field = TableSelectionBox()
         

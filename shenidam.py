@@ -262,8 +262,11 @@ class ShenidamFileProcessor(object):
         self.audio_export_params = model.audio_export_params
         self.default_audio_remix_params = model.default_audio_remix_params if model.default_audio_remix_params is not None else "-acodec copy"
         self.default_av_audio_remix_params = model.default_av_audio_remix_params if model.default_av_audio_remix_params is not None else "-vcodec copy -acodec copy"
-    def create_temporary_file_name(self):
-        return os.path.join(self.tmp_dir,"shenidam-av-tmp-"+uuid.uuid4().hex)
+    def create_temporary_file_name(self,output=False):
+        tmp_dir = self.tmp_dir
+        if output:
+            tmp_dir = self.output_tmp_dir
+        return os.path.join(tmp_dir,"shenidam-av-tmp-"+uuid.uuid4().hex)
     def shenidam_updater(self,line,event):
         if event["MESSAGE"] in ("base-read","track-read","track-position-determined","wrote-file"):
             assert self.num_converted < len(self.input_tracks)
@@ -309,7 +312,7 @@ class ShenidamFileProcessor(object):
                         delete_filenames([base],self.transcode_base)
                         delete_filenames(input_transcoded_fns)
                         output_remixed_files = [[filename_from_pattern(ix[0],ix[1],output_pattern) for ix in enumerate(self.input_tracks)] for (output_pattern,d1,d2) in self.output_params]
-                        remixed_temp_files = [[self.create_temporary_file_name()+"."+os.path.basename(x) for x in y] for y in output_remixed_files]
+                        remixed_temp_files = [[self.create_temporary_file_name(True)+"."+os.path.basename(x) for x in y] for y in output_remixed_files]
                         remixed_temp_files_all = [item for sublist in remixed_temp_files for item in sublist]
                         with TemporaryFile(remixed_temp_files_all):
                             self.notifier.update_major(len(self.output_params)*len(self.input_tracks))#4 remixing audio
