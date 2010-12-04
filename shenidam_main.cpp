@@ -32,6 +32,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "boost/thread.hpp"
+
 
 #include "shenidam.h"
 
@@ -81,6 +83,8 @@ double threshold = 1;
 int num_tries = 5;
 bool return_only = false;
 bool version = false;
+int num_threads = 1;
+
 boost::mt19937 gen(std::time(0));
 
 
@@ -202,174 +206,185 @@ int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,int in, 
 }
 int parse_options(int argc, char** argv)
 {
+    num_threads = boost::thread::hardware_concurrency();
 	int i = 1;
 	while(i < argc)
 	{
-		 std::string arg(argv[i++]);
-		 if (arg == "-q" || arg == "--quiet")
-		 {
-			 quiet = true;
-		 }
-		 else if (arg == "-r" || arg == "--shenidam-return-only")
-		 {
-			 return_only = true;
-			 return 0;
-		 }
-		 else if (arg == "-t" || arg == "--test")
-		 {
-			 test = true;
-		 }
-		 else if (arg == "-v" || arg == "--verbose")
-		 {
-			 verbose = true;
-		 }
-		 else if (arg == "-V" || arg == "--version")
-		 {
-			 version = true;
-		 }
-		 else if (arg == "-n" || arg == "--number-tracks")
-		 {
-			 if (i == argc) return 1;
-			 if (num_files != 0)
-			 {
-				 fprintf(stderr,"ERROR: Number of tracks already defined.\nNote: If set, it must be set before any input our output tracks.\n");
-			 }
-			 num_files = strtol(argv[i++],NULL,10);
-			 if (num_files <= 0)
-			 {
-				 fprintf(stderr,"ERROR: Invalid number of tracks!\n");
-				 return 1;
-			 }
-		 }
-		 else if (arg == "-b" || arg == "--base")
-		 {
-			 if (i == argc) return 1;
-			 if (base_set) return 1;
-			 base_filename = argv[i++];
-			 base_set = true;
-		 }
-		 else if (arg == "-i" || arg == "--input")
-		 {
-			 if (!in_tracks.empty())
-			 {
-				 fprintf(stderr,"ERROR: Input tracks already set.\n");
-				 return 1;
-			 }
-			 if (num_files == 0)
-			 {
-				 num_files = 1;
-			 }
-			 for (int j = 0; j < num_files;j++)
-			 {
-				 if (i == argc) return 1;
-				 in_tracks.push_back(std::string(argv[i++]));
-			 }
-		 }
-		 else if (arg == "-o" || arg == "--output")
-		 {
-			 if (default_output)
-			 {
-				 fprintf(stderr,"ERROR: Cannot set both default output and output track names.\n");
-				 return 1;
-			 }
-			 if (!out_tracks.empty())
-			 {
-				 fprintf(stderr,"ERROR: Output tracks already set.\n");
-				 return 1;
-			 }
-			 if (num_files == 0)
-			 {
-				 num_files = 1;
-			 }
-			 for (int j = 0; j < num_files;j++)
-			 {
-				 if (i == argc) return 1;
-				 out_tracks.push_back(std::string(argv[i++]));
-			 }
-		 }
-		 else if (arg == "-d" || arg == "--default-output")
-		 {
-			 if (!out_tracks.empty())
-			 {
-				 fprintf(stderr,"ERROR: Cannot set both default output and output track names.\n");
-				 return 1;
-			 }
-			 default_output = true;
-		 }
-		 else if (arg == "-m" || arg == "--send-messages" )
-		 {
-			 send_messages = true;
-		 }
-		 else if (arg == "-s" || arg == "--sample-rate")
-		 {
-			 if (i == argc) return 1;
-			 sample_rate = strtod(argv[i++],NULL);
-			 if (sample_rate <= 0)
-			 {
-				 fprintf(stderr,"ERROR: Invalid sample rate.\n");
-				 return 1;
-			 }
-		 }
-		 else if (arg == "-nt" || arg == "--num-tries")
-		 {
-			 if (i == argc) return 1;
-			 num_tries = strtol(argv[i++],NULL,10);
-			 if (num_tries <= 0)
-			 {
-				 fprintf(stderr,"ERROR: Invalid number of tries!\n");
-				 return 1;
-			 }
-		 }
-		 else if (arg == "-tt" || arg == "--test-threshold")
-		 {
-			 if (i == argc) return 1;
-			 threshold = strtod(argv[i++],NULL);
-			 if (threshold <= 1E-6)
-			 {
-				 fprintf(stderr,"ERROR: Invalid or too small threshold.\n");
-				 return 1;
-			 }
-		 }
-		 else if (arg == "-ts" || arg == "--test-track-size")
-		 {
-			 if (i == argc) return 1;
-			 size_test_track = strtod(argv[i++],NULL);
-			 if (threshold <= 0)
-			 {
-				 fprintf(stderr,"ERROR: Invalid test track size.\n");
-				 return 1;
-			 }
-		 }
-		 else if (arg == "-c" || arg == "--can-open-base")
-		 {
-			 can_open_mode = true;
-		 }
-		 else
-		 {
-			 return 1;
-		 }
-
-	}
+        std::string arg(argv[i++]);
+        if (arg == "-q" || arg == "--quiet")
+        {
+            quiet = true;
+        }
+        else if (arg == "-r" || arg == "--shenidam-return-only")
+        {
+            return_only = true;
+            return 0;
+        }
+        else if (arg == "-T" || arg == "--num-threads")
+        {
+           if (i == argc) return 1;
+           num_threads = strtol(argv[i++],NULL,10);
+           if (num_threads <= 0)
+           {
+               fprintf(stderr,"ERROR: Invalid number of tracks!\n");
+               return 1;
+           }
+        }
+        else if (arg == "-t" || arg == "--test")
+        {
+            test = true;
+        }
+        else if (arg == "-v" || arg == "--verbose")
+        {
+            verbose = true;
+        }
+        else if (arg == "-V" || arg == "--version")
+        {
+            version = true;
+        }
+        else if (arg == "-n" || arg == "--number-tracks")
+        {
+            if (i == argc) return 1;
+            if (num_files != 0)
+            {
+                fprintf(stderr,"ERROR: Number of tracks already defined.\nNote: If set, it must be set before any input our output tracks.\n");
+            }
+            num_files = strtol(argv[i++],NULL,10);
+            if (num_files <= 0)
+            {
+                fprintf(stderr,"ERROR: Invalid number of tracks!\n");
+                return 1;
+            }
+        }
+        else if (arg == "-b" || arg == "--base")
+        {
+            if (i == argc) return 1;
+            if (base_set) return 1;
+            base_filename = argv[i++];
+            base_set = true;
+        }
+        else if (arg == "-i" || arg == "--input")
+        {
+            if (!in_tracks.empty())
+            {
+                fprintf(stderr,"ERROR: Input tracks already set.\n");
+                return 1;
+            }
+            if (num_files == 0)
+            {
+                num_files = 1;
+            }
+            for (int j = 0; j < num_files;j++)
+            {
+                if (i == argc) return 1;
+                in_tracks.push_back(std::string(argv[i++]));
+            }
+        }
+        else if (arg == "-o" || arg == "--output")
+        {
+            if (default_output)
+            {
+                fprintf(stderr,"ERROR: Cannot set both default output and output track names.\n");
+                return 1;
+            }
+            if (!out_tracks.empty())
+            {
+                fprintf(stderr,"ERROR: Output tracks already set.\n");
+                return 1;
+            }
+            if (num_files == 0)
+            {
+                num_files = 1;
+            }
+            for (int j = 0; j < num_files;j++)
+            {
+                if (i == argc) return 1;
+                out_tracks.push_back(std::string(argv[i++]));
+            }
+        }
+        else if (arg == "-d" || arg == "--default-output")
+        {
+            if (!out_tracks.empty())
+            {
+                fprintf(stderr,"ERROR: Cannot set both default output and output track names.\n");
+                return 1;
+            }
+            default_output = true;
+        }
+        else if (arg == "-m" || arg == "--send-messages" )
+        {
+            send_messages = true;
+        }
+        else if (arg == "-s" || arg == "--sample-rate")
+        {
+            if (i == argc) return 1;
+            sample_rate = strtod(argv[i++],NULL);
+            if (sample_rate <= 0)
+            {
+                fprintf(stderr,"ERROR: Invalid sample rate.\n");
+                return 1;
+            }
+        }
+        else if (arg == "-nt" || arg == "--num-tries")
+        {
+            if (i == argc) return 1;
+            num_tries = strtol(argv[i++],NULL,10);
+            if (num_tries <= 0)
+            {
+                fprintf(stderr,"ERROR: Invalid number of tries!\n");
+                return 1;
+            }
+        }
+        else if (arg == "-tt" || arg == "--test-threshold")
+        {
+            if (i == argc) return 1;
+            threshold = strtod(argv[i++],NULL);
+            if (threshold <= 1E-6)
+            {
+                fprintf(stderr,"ERROR: Invalid or too small threshold.\n");
+                return 1;
+            }
+        }
+        else if (arg == "-ts" || arg == "--test-track-size")
+        {
+            if (i == argc) return 1;
+            size_test_track = strtod(argv[i++],NULL);
+            if (threshold <= 0)
+            {
+                fprintf(stderr,"ERROR: Invalid test track size.\n");
+                return 1;
+            }
+        }
+        else if (arg == "-c" || arg == "--can-open-base")
+        {
+            can_open_mode = true;
+        }
+        else
+        {
+            return 1;
+        }
+    }
 	return 0;
 }
 void usage()
 {
 	fprintf(stderr,"USAGE: shenidam [params]\nOptions:\n\t-n integer\n\t--number-tracks integer\n\t\tNumber of tracks to match to the base (default 1).\nIf set, it must be set before the list of (input or output) tracks.\n\n"
-			"\t-q\n\t--quiet\n\t\tsuppress messages\n\n"
-			"\t-v\n\t--verbose\n\t\tverbose mode\n\n"
+			"\t-q\t--quiet\n\t\tsuppress messages\n\n"
+			"\t-v\t--verbose\n\t\tverbose mode\n\n"
 			"\t-b track_filename\n\t--base track_filename\n\t\tset the base track"
-			"\t-i [filename_1 .. filename_n]\n\t--input [filename_1 .. filename_n]\n\t\tset the n input tracks\n\n"
-			"\t-o [filename_1 .. filename_n]\n\t--output [filename_1 .. filename_n]\n\t\tset the n output tracks\n\n"
-			"\t-d\n\t--default-output [filename_1 .. filename_n]\n\t\tset the n output tracks\n\n"
-			"\t-m\n\t--output-mapping [filename_1 .. filename_n]\n\t\toutput the mapping sample in-position and length\n\n"
-			"\t-s\n\t--sample-rate\n\t\tSample rate for audio processing (default 16000, more means more memory and cpu cycles and potentially more precise calculation).\n\n"
-			"\t-t\n\t--test\n\t\ttest mode (requires only base). Tests critical noise boundary according to number of tries and threshold.\n\n"
-			"\t-nt\n\t--num-tries integer\n\t\tNumber of tries for test mode (default 5). More means more precise boundary and processing time.\n\n"
-			"\t-tt\n\t--test-threshold real\n\t\tThreshold for determining critical noise boundary (Default 0.1, less means more precise boundary)\n\n"
-			"\t-ta\n\t--test-track-size real\n\t\tSize in seconds of generated track for test mode (Default 120s, needs to be less than the audio signal's length.)\n\n"
-			"\t-c\n\t--can-open-base\n\t\tTest to see if the base can be opened (and return a non-zero value if not)\n\n"
-			"\t-V\n\t--version\n\t\tPrint shenidam version and return success\n\n"
-			"\t-r\n\t--shenidam-return-only\n\t\tDo nothing and return success (check and see if the executable works)\n\n");
+			"\t-i\t--input [filename_1 .. filename_n]\n\t\tset the n input tracks\n\n"
+			"\t-o\t--output [filename_1 .. filename_n]\n\t\tset the n output tracks\n\n"
+			"\t-d\t--default-output [filename_1 .. filename_n]\n\t\tset the n output tracks\n\n"
+			"\t-m\t--output-mapping [filename_1 .. filename_n]\n\t\toutput the mapping sample in-position and length\n\n"
+			"\t-s\t--sample-rate real\n\t\tSample rate for audio processing (default 16000, more means more memory and cpu cycles and potentially more precise calculation).\n\n"
+			"\t-t\t--test\n\t\ttest mode (requires only base). Tests critical noise boundary according to number of tries and threshold.\n\n"
+			"\t-nt\t--num-tries integer\n\t\tNumber of tries for test mode (default 5). More means more precise boundary and processing time.\n\n"
+			"\t-tt\t--test-threshold real\n\t\tThreshold for determining critical noise boundary (Default 0.1, less means more precise boundary)\n\n"
+			"\t-ta\t--test-track-size real\n\t\tSize in seconds of generated track for test mode (Default 120s, needs to be less than the audio signal's length.)\n\n"
+			"\t-c\t--can-open-base\n\t\tTest to see if the base can be opened (and return a non-zero value if not)\n\n"
+			"\t-V\t--version\n\t\tPrint shenidam version and return success\n\n"
+			"\t-r\t--shenidam-return-only\n\t\tDo nothing and return success (check and see if the executable works)\n\n"
+			"\t-T\t--num-threads integer\n\t\tNumber of threads for fourier transform (default is number of cores) \n\n");
 
 }
 
@@ -379,7 +394,7 @@ std::string get_default_output_filename(std::string input_filename)
 }
 int process_audio()
 {
-	shenidam_t processor = shenidam_create(sample_rate);
+	shenidam_t processor = shenidam_create(sample_rate,num_threads);
 	SF_INFO base_info;
 	std::memset(&base_info,0,sizeof(SF_INFO));
 	SNDFILE* base = sf_open(base_filename.c_str(),SFM_READ,&base_info);
@@ -512,7 +527,7 @@ bool test_n(shenidam_t processor, float* base,size_t total_num_samples,double sa
 }
 int do_test()
 {
-	shenidam_t processor = shenidam_create(sample_rate);
+	shenidam_t processor = shenidam_create(sample_rate,num_threads);
 	SF_INFO base_info;
 	std::memset(&base_info,0,sizeof(SF_INFO));
 	SNDFILE* base = sf_open(base_filename.c_str(),SFM_READ,&base_info);
@@ -571,6 +586,12 @@ int main(int argc, char **argv) {
 	if (version)
 	{
 	    std::cout << "Shenidam Version : shenidam-"<< SHENIDAM_VERSION << std::endl;
+	    #ifdef SHENIDAM_FFT_THREADED
+	    std::cout << "Compiled with threading support for FFTW." << std::endl;
+	    #endif
+	    #ifdef SHENIDAM_PARALLEL_OMP
+	    std::cout << "Compiled with OpenMP support." << std::endl;
+	    #endif
 	    return 0;
 	}
 	bool has_output = test || send_messages || default_output || out_tracks.size() || can_open_mode;

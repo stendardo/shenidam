@@ -48,7 +48,7 @@ enum SHENIDAM_ERROR_CODES
  * Creates a handle to an empty audio position determiner. It should be destroyed with shedinam_destroy.
  * The base sample rate is the sample rate which will be used.
  */
-shenidam_t shenidam_create(double base_sample_rate);
+shenidam_t shenidam_create(double base_sample_rate,int num_threads);
 /**
  * Adds a filter which is applied to the Fourier transforms of both the track and the base.
  */

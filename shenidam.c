@@ -28,7 +28,10 @@
 #include "float.h"
 #include "samplerate.h"
 #include "setjmp.h"
-
+#include "config.h"
+#ifdef SHENIDAM_PARALLEL_OMP
+#include "omp.h"
+#endif
 
 typedef float sample_d;
 typedef fftwf_complex sample_f;
@@ -50,6 +53,7 @@ typedef struct
 	size_t base_num_samples;
 	frequential_filter_cb* frequential_filters;
 	void** frequential_filter_data;
+	int num_threads;
 } shenidam_t_impl ;
 
 
@@ -106,6 +110,7 @@ static void normalize(sample_d* samples,size_t num_samples_d)
 {
 	double mean = 0;
 	double var = 0;
+	#pragma omp parallel for reduction(+:mean) reduction(+:var)
 	for(size_t i = 0; i < num_samples_d; i++)
 	{
 		mean += samples[i];
@@ -115,6 +120,7 @@ static void normalize(sample_d* samples,size_t num_samples_d)
 	var = sqrt(var-mean*mean);
 	if (var == 0)
 	{
+	    #pragma omp parallel for
 		for(size_t i = 0; i < num_samples_d; i++)
 		{
 			samples[i]=(samples[i]-mean);
@@ -122,19 +128,26 @@ static void normalize(sample_d* samples,size_t num_samples_d)
 	}
 	else
 	{
+	    #pragma omp parallel for
 		for(size_t i = 0; i < num_samples_d; i++)
 		{
 			samples[i]=(samples[i]-mean)/var;
 		}
 	}
 }
-static sample_f* fft(sample_d* samples_d,size_t num_samples_d)
+static sample_f* fft(sample_d* samples_d,size_t num_samples_d,int num_threads)
 {
 
 	size_t num_samples_f = num_samples_d/2 + 1;
 	sample_f* samples_f = ehmalloc(sizeof(sample_f)*num_samples_f);
 	sample_d* buffer_d = FFT_MALLOC(sizeof(sample_d)*num_samples_d);
 	sample_f* buffer_f = FFT_MALLOC(sizeof(sample_f)*num_samples_f);
+#ifdef SHENIDAM_FFT_THREADED
+    if (num_threads)
+    {
+        fftwf_plan_with_nthreads(num_threads);
+    }
+#endif
 	FFT_PLAN plan = FFT_FORWARD(num_samples_d,buffer_d,buffer_f,FFTW_ESTIMATE);
 	memcpy(buffer_d,samples_d,sizeof(sample_d)*num_samples_d);
 	FFT_EXECUTE(plan);
@@ -146,13 +159,19 @@ static sample_f* fft(sample_d* samples_d,size_t num_samples_d)
 	return samples_f;
 }
 
-static sample_d* ifft(sample_f* samples_f,size_t num_samples_d)
+static sample_d* ifft(sample_f* samples_f,size_t num_samples_d,int num_threads)
 {
 
 	size_t num_samples_f = num_samples_d/2 + 1;
 	sample_d* samples_d = ehmalloc(sizeof(sample_d)*num_samples_d);
 	sample_d* buffer_d = fft_ehmalloc(sizeof(sample_d)*num_samples_d);
 	sample_f* buffer_f = fft_ehmalloc(sizeof(sample_f)*num_samples_f);
+#ifdef SHENIDAM_FFT_THREADED
+    if (num_threads)
+    {
+        fftwf_plan_with_nthreads(num_threads);
+    }
+#endif
 	FFT_PLAN plan = FFT_BACKWARD(num_samples_d,buffer_f,buffer_d,FFTW_ESTIMATE);
 	memcpy(buffer_f,samples_f,sizeof(sample_f)*num_samples_f);
 	FFT_EXECUTE(plan);
@@ -166,7 +185,6 @@ static sample_d* ifft(sample_f* samples_f,size_t num_samples_d)
 
 static sample_d* resize(sample_d* samples_in, size_t num_samples_in,size_t num_samples_out)
 {
-
 	sample_d* res = (sample_d*)ehmalloc(sizeof(sample_d)*num_samples_out);
 	memset(res,0,sizeof(sample_d)*num_samples_out);
 	int min_num_samples = num_samples_out< num_samples_in?num_samples_out:num_samples_in;
@@ -222,7 +240,47 @@ static sample_d* resample(sample_d* samples_in,size_t num_samples_in,double samp
 	*num_samples_out = src_data.output_frames_gen;
 	return src_data.data_out;
 }
-
+static sample_d* resample_parallel(sample_d* samples_in,size_t num_samples_in,double sample_rate_ratio, size_t *num_samples_out)
+{
+#ifndef SHENIDAM_PARALLEL_OMP
+    return resample(samples_in,num_samples_in,sample_rate_ratio,num_samples_out);
+#else
+    int num_threads = omp_get_num_threads();
+    if(num_threads == 1)
+    {
+        return resample(samples_in,num_samples_in,sample_rate_ratio,num_samples_out);
+    }
+    float **buffers = malloc(sizeof(float*)*num_threads);
+    size_t *buffer_sizes = malloc(sizeof(size_t)*num_threads);
+    size_t *cumulated_buffer_sizes = malloc(sizeof(size_t)*(num_threads+1));
+    size_t slice_size = num_samples_in/num_threads;
+    size_t current_slice_size = slice_size;
+    #pragma omp parallel private(current_slice_size)
+    {
+        int i = omp_get_thread_num();
+        current_slice_size = i == num_threads -1 ? num_samples_in - (i * slice_size):slice_size;
+        buffers[i]=resample(&samples_in[i * slice_size],current_slice_size,sample_rate_ratio,&buffer_sizes[i]);
+    }
+    *num_samples_out = 0;
+    cumulated_buffer_sizes[0]=0;
+    for (size_t j =0; j < num_threads;j++)
+    {
+        *num_samples_out += buffer_sizes[j];
+        cumulated_buffer_sizes[j+1]=cumulated_buffer_sizes[j]+buffer_sizes[j];
+    }
+    sample_d* res = malloc(sizeof(sample_d)*(*num_samples_out));
+    #pragma omp parallel
+    {
+        int i = omp_get_thread_num();
+        memcpy(&res[cumulated_buffer_sizes[i]],&buffers[i], sizeof(sample_d)*buffer_sizes[i]);
+        ehfree(buffers[i]);
+    }
+    free(buffers);
+    free(buffer_sizes);
+    free(cumulated_buffer_sizes);
+    return res;
+#endif
+}
 static size_t get_common_size(size_t minimal_size)
 {
 	size_t res = 1;
@@ -233,13 +291,21 @@ static size_t get_common_size(size_t minimal_size)
 	return res;
 }
 
-shenidam_t shenidam_create(double base_sample_rate)
+shenidam_t shenidam_create(double base_sample_rate,int num_threads)
 {
+    if (num_threads <= 1)
+	{
+	    num_threads = 1;
+	}
 	if (!initialized_module)
 	{
+        #ifdef SHENIDAM_FFT_THREADED
+            fftwf_init_threads();
+        #endif
 		//Add shenidam initialization code here-
 		initialized_module = 1;
 	}
+	
 	if (setjmp(jb))
 	{
 		return NULL;
@@ -250,6 +316,7 @@ shenidam_t shenidam_create(double base_sample_rate)
 	res->frequential_filters = (frequential_filter_cb*)malloc(sizeof(frequential_filter_cb));
 	res->frequential_filters[0] = NULL;
 	res->frequential_filter_data = NULL;
+	res->num_threads = num_threads;
 	return res;
 }
 
@@ -296,7 +363,7 @@ int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,si
 	}
 	normalize(base,num_samples);
 	size_t num_samples_new = (size_t)round(num_samples * impl->base_sample_rate/sample_rate);
-	temp = resample(base,num_samples,impl->base_sample_rate/sample_rate,&num_samples_new);
+	temp = resample_parallel(base,num_samples,impl->base_sample_rate/sample_rate,&num_samples_new);
 	base = temp;
 	impl->base_num_samples = num_samples_new;
 
@@ -308,7 +375,6 @@ int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,si
 
 int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samples,size_t num_samples,double sample_rate,int* in_point,size_t* length)
 {
-
 	if (setjmp(jb))
 	{
 		return ALLOCATION_ERROR;
@@ -343,7 +409,7 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 	if (sample_rate_ratio != 1)
 	{
 		size_t num_samples_temp = (size_t)ceil(num_samples*sample_rate_ratio);
-		temp_d = resample(track,num_samples,sample_rate_ratio,&num_samples_temp);
+		temp_d = resample_parallel(track,num_samples,sample_rate_ratio,&num_samples_temp);
 		free(track);
 		track = temp_d;
 		num_samples = num_samples_temp;
@@ -362,9 +428,9 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 	}
 	base = temp_d;
 
-	track_f = fft(track,common_size);
+	track_f = fft(track,common_size,impl->num_threads);
 	ehfree(track);
-	base_f = fft(base,common_size);
+	base_f = fft(base,common_size,impl->num_threads);
 	ehfree(base);
 	void** data_p = impl->frequential_filter_data;
 	for(frequential_filter_cb* cur=impl->frequential_filters;(*cur)!=NULL;cur++,data_p++)
@@ -372,12 +438,13 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 		(*cur)(track_f,common_size_f,*data_p);
 		(*cur)(base_f,common_size_f,*data_p);
 	}
+	#pragma omp parallel for
 	for (size_t i = 0; i < common_size_f;i++)
 	{
 		track_f[i]=conjf(track_f[i])*base_f[i];
 	}
 	ehfree(base_f);
-	convolved = ifft(track_f,common_size);
+	convolved = ifft(track_f,common_size,impl->num_threads);
 	ehfree(track_f);
 	sample_d maxv = -DBL_MAX;
 	int in = 0;
