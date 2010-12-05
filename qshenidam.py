@@ -39,6 +39,7 @@ def launch(model):
     fileprocessor = shenidam.ShenidamFileProcessor(model,notifier)
     progress = QtGui.QProgressDialog("","Abort",0,100,parent=frame)
     progress.setAutoClose(False)
+    progress.setAutoReset(False)
     error = None
     done = False
     def on_cancel():
@@ -49,7 +50,7 @@ def launch(model):
         try:
             fileprocessor.convert()
         except shenidam.CanceledException:
-            print("Canceled")
+            pass
         except BaseException as e:
             error = str(e)
         finally:
@@ -73,7 +74,7 @@ def launch(model):
                 progress.setCancelButton(None)
                 notifier.cancel()
             try:
-                x,y = queue.get(False)
+                x,y = queue.get(timeout=0.1)
                 if x == "level":
                     progress.setValue(int(round(y*100)))
                     progress.setLabelText("")

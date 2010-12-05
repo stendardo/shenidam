@@ -409,9 +409,9 @@ def check_model(model):
     for y,d1,d2 in model.output_params:
         for i,x in enumerate(model.input_tracks):
             check_file_write(filename_from_pattern(i,x,y))
-    if not os.path.isdir(model.tmp_dir) and not os.access(model.tmp_dir,os.W_OK):
+    if model.output_tmp_dir is not None and ( not os.path.isdir(model.tmp_dir) or not os.access(model.tmp_dir,os.W_OK)):
         raise ModelException("Cannot write to temporary directory '"+model.tmp_dir+"'")
-    if not os.path.isdir(model.output_tmp_dir) and not os.access(model.output_tmp_dir,os.W_OK):
+    if model.output_tmp_dir is not None and ( not os.path.isdir(model.output_tmp_dir) or not os.access(model.output_tmp_dir,os.W_OK)):
         raise ModelException("Cannot write to output temporary directory '"+model.output_tmp_dir+"'")
     if subprocess.call([model.ffmpeg ,"-version"],stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False):
         raise ModelException("Cannot run ffmpeg. Check path.")

@@ -6,12 +6,15 @@ set(SHENIDAM_PYTHON_PATH "lib/shenidam/python")
 
 set(EXTRA_LIBS )
 
-option (ENABLE_OPENMP  "Use OpenMP for parallel processing if available (potential small speedup on SMP machines)" OFF) 
+option (ENABLE_OPENMP  "Use OpenMP for parallel processing if available (potential extra-small speedup on SMP machines - experimental)" OFF) 
 option (ENABLE_FFTW_THREADING "Use FFTW threading support if available (potential significant speedup on SMP machines)" ON) 
-
+option (WITH_BOOST_THREAD "Use boost::thread to determine total number of CPUs (effective only when ENABLE_FFTW_THREADING is available)" ON) 
+option (ENABLE_TEST_MODE "Enables test mode (requires boost::random)" ON) 
 
 
 INCLUDE (CheckLibraryExists) 
+INCLUDE (CheckIncludeFileCXX)
+
 
 if(ENABLE_OPENMP)
     find_package(OpenMP)
@@ -23,6 +26,8 @@ if(ENABLE_OPENMP)
         endif(HAVE_GOMP)
         set(CMAKE_C_FLAGS ${CMAKE_C_FLAGS} ${OPENMP_C_FLAGS})
         set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} ${OPENMP_CXX_FLAGS})
+    else()
+        message(WARNING "No OpenMP available for compiler.")
     endif(OPENMP_FOUND)
 endif()
 
@@ -41,15 +46,41 @@ if (NOT HAVE_SRC)
     message(SEND_ERROR "No libsamplerate library available.")
 endif()
 
-CHECK_LIBRARY_EXISTS(boost_thread _init "" HAVE_BOOST_THREAD)
-if (NOT HAVE_BOOST_THREAD)
-    message(SEND_ERROR "No boost-thread library available.")
+if (WITH_BOOST_THREAD)
+    CHECK_LIBRARY_EXISTS(boost_thread _init "" HAVE_BOOST_THREAD)
+    CHECK_INCLUDE_FILE_CXX("boost/thread.hpp" HAVE_BOOST_THREAD_H)
+
+
+    if (HAVE_BOOST_THREAD_H AND HAVE_BOOST_THREAD)
+        set (SHENIDAM_HAVE_BOOST_THREAD 1)
+        set (EXTRA_LIBS ${EXTRA_LIBS} boost_thread)
+    else()
+        if (NOT HAVE_BOOST_THREAD_H)
+            message(WARNING "No boost::thread headers available.")
+        endif()
+        if (NOT HAVE_BOOST_THREAD)
+            message(WARNING "No boost::thread library available.")
+        endif()
+    endif()
+
+endif()
+if (ENABLE_TEST_MODE)
+    CHECK_LIBRARY_EXISTS(boost_random _init "" HAVE_BOOST_RANDOM)
+    CHECK_INCLUDE_FILE_CXX("boost/random.hpp" HAVE_BOOST_RANDOM_H)
+    if (HAVE_BOOST_RANDOM_H AND HAVE_BOOST_RANDOM)
+        set (SHENIDAM_ENABLE_TEST_MODE 1)
+        set (EXTRA_LIBS ${EXTRA_LIBS} boost_random)
+    else()
+        if (NOT HAVE_BOOST_RANDOM_H)
+            message(WARNING "No boost::random headers available.")
+        endif()
+        if (NOT HAVE_BOOST_RANDOM)
+            message(WARNING "No boost::random library available.")
+        endif()
+    endif()
 endif()
 
-CHECK_LIBRARY_EXISTS(boost_random _init "" HAVE_BOOST_RANDOM)
-if (NOT HAVE_BOOST_RANDOM)
-    message(SEND_ERROR "No boost-random library available.")
-endif()
+
 
 
 if(ENABLE_FFTW_THREADING)

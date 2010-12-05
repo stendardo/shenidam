@@ -22,7 +22,6 @@
 #include "config.h"
 #include "boost/random.hpp"
 #include "boost/foreach.hpp"
-#include "boost/lexical_cast.hpp"
 
 #include "ctime"
 #include <vector>
@@ -31,7 +30,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
-
+#include <sstream>
 #include "boost/thread.hpp"
 
 
@@ -42,7 +41,12 @@
 
 #define foreach BOOST_FOREACH
 
-
+template<typename T> std::string to_string(T value)
+{
+    std::stringstream ss;
+    ss << value;
+    return ss.str();
+}
 static int read_sndfile_average(SNDFILE* sndfile,SF_INFO* info,float** result)
 {
 	size_t n = (size_t) std::ceil(info->frames/1024.0);
@@ -110,11 +114,10 @@ void send_message(std::string event,std::map<std::string,std::string> kv)
     
     if (send_messages)
     {
-        std::pair<std::string,std::string> p;
         std::cout << "MESSAGE:"<<event<<";";
-        foreach(p,kv)
+        for(std::map<std::string,std::string>::iterator p =kv.begin();p!= kv.end();p++)
         {
-            std::cout << p.first << ":" << p.second << ";";
+            std::cout << p->first << ":" << p->second << ";";
         }
         std::cout << std::endl;
     }
@@ -349,7 +352,7 @@ int parse_options(int argc, char** argv)
         {
             if (i == argc) return 1;
             size_test_track = strtod(argv[i++],NULL);
-            if (threshold <= 0)
+            if (size_test_track <= 0)
             {
                 fprintf(stderr,"ERROR: Invalid test track size.\n");
                 return 1;
@@ -379,7 +382,7 @@ void usage()
 			"\t-s\t--sample-rate real\n\t\tSample rate for audio processing (default 16000, more means more memory and cpu cycles and potentially more precise calculation).\n\n"
 			"\t-t\t--test\n\t\ttest mode (requires only base). Tests critical noise boundary according to number of tries and threshold.\n\n"
 			"\t-nt\t--num-tries integer\n\t\tNumber of tries for test mode (default 5). More means more precise boundary and processing time.\n\n"
-			"\t-tt\t--test-threshold real\n\t\tThreshold for determining critical noise boundary (Default 0.1, less means more precise boundary)\n\n"
+			"\t-tt\t--test-threshold real\n\t\tThreshold for determining a correct match in test mode (Default 1 second)\n\n"
 			"\t-ta\t--test-track-size real\n\t\tSize in seconds of generated track for test mode (Default 120s, needs to be less than the audio signal's length.)\n\n"
 			"\t-c\t--can-open-base\n\t\tTest to see if the base can be opened (and return a non-zero value if not)\n\n"
 			"\t-V\t--version\n\t\tPrint shenidam version and return success\n\n"
@@ -426,8 +429,8 @@ int process_audio()
 			continue;
 		}
 		std::map<std::string,std::string> kv;
-		kv["determined_in"]=boost::lexical_cast<std::string>(in);
-		kv["determined_length"]=boost::lexical_cast<std::string>(length);
+		kv["determined_in"]=to_string(in);
+		kv["determined_length"]=to_string(length);
 		kv["file"]=input_fn;
 		send_message("track-position-determined",kv);
 		if (default_output || out_tracks.size())
