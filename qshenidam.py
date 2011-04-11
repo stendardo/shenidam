@@ -26,6 +26,7 @@ import json
 import os.path
 import tempfile
 import sys
+import base64
 try:
     import Queue as squeue
 except ImportError:
@@ -320,14 +321,22 @@ class MultipleFileConversionWindow(QtGui.QWidget):
         return self.input_field.value()
     def output(self):
         return self.output_field.value()
-class Frame(QtGui.QWidget):
+class Frame(QtGui.QMainWindow):
     def __init__(self):
         QtGui.QWidget.__init__(self)
+
+	import qshenidam_icon as qi
+	pixmap = QtGui.QPixmap()
+	pixmap.loadFromData(base64.b64decode(qi.__data__))
+	
+
+	self.setCentralWidget(QtGui.QWidget())
         self.tabs = QtGui.QTabWidget()
         self.single = SingleFileConversionWindow()
         self.multi = MultipleFileConversionWindow()
         self.prefs = PreferencesWindow()
         self.setWindowTitle("QShenidam")
+	application.setWindowIcon(QtGui.QIcon(pixmap))
         self.tabs.addTab(self.single,"Simple Mode (Single Track)")
         self.tabs.addTab(self.multi,"Advanced Mode (Multiple Tracks and Outputs)")
         b_prefs = QtGui.QPushButton("Preferences")
@@ -341,7 +350,7 @@ class Frame(QtGui.QWidget):
         vbox = QtGui.QVBoxLayout()
         vbox.addWidget(self.tabs)
         vbox.addLayout(hbox)
-        self.setLayout(vbox)
+        self.centralWidget().setLayout(vbox)
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.keep_alive)
         self.timer.start(100)

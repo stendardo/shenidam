@@ -8,13 +8,24 @@ set(EXTRA_LIBS )
 
 option (ENABLE_OPENMP  "Use OpenMP for parallel processing if available (potential extra-small speedup on SMP machines - experimental)" OFF) 
 option (ENABLE_FFTW_THREADING "Use FFTW threading support if available (potential significant speedup on SMP machines)" ON) 
-option (WITH_BOOST_THREAD "Use boost::thread to determine total number of CPUs (effective only when ENABLE_FFTW_THREADING is available)" ON) 
+option (WITH_BOOST_THREAD "Use boost::thread if available to determine total number of CPUs (effective only when ENABLE_FFTW_THREADING is available)" ON) 
 option (ENABLE_TEST_MODE "Enables test mode (requires boost::random)" ON) 
 
 
 INCLUDE (CheckLibraryExists) 
 INCLUDE (CheckIncludeFileCXX)
 INCLUDE (CheckCXXSourceCompiles)
+
+MACRO(CONVERT_DATA_TO_PYTHON_FILE TARGET_NAME SOURCE_FILE DEST_FILE DEPENDS)
+ADD_CUSTOM_COMMAND(
+	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${DEST_FILE}
+	COMMAND mkdir -p `dirname ${CMAKE_CURRENT_BINARY_DIR}/${DEST_FILE}` && echo __data__ = \\'`base64 ${PROJECT_SOURCE_DIR}/${SOURCE_FILE}`\\' > ${CMAKE_CURRENT_BINARY_DIR}/${DEST_FILE}
+	DEPENDS ${PROJECT_SOURCE_DIR}/${SOURCE_FILE} ${DEPENDS}
+)
+add_custom_target(${TARGET_NAME} ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${DEST_FILE})
+ENDMACRO()
+
+CONVERT_DATA_TO_PYTHON_FILE(python_icon icons/qshenidam_256.png pack/qshenidam_icon.py "")
 
 if(ENABLE_OPENMP)
     find_package(OpenMP)
@@ -75,14 +86,16 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-" HAVE_BOOST_RANDOM)
-    if (NOT HAVE_BOOST_RANDOM)
+" DOESNT_NEED_BOOST_RANDOM_LIB)
+    if (NOT DOESNT_NEED_BOOST_RANDOM_LIB)
     	CHECK_LIBRARY_EXISTS(boost_random _init "" HAVE_BOOST_RANDOM)
     endif()
     CHECK_INCLUDE_FILE_CXX("boost/random.hpp" HAVE_BOOST_RANDOM_H)
-    if (HAVE_BOOST_RANDOM_H AND HAVE_BOOST_RANDOM)
+    if (HAVE_BOOST_RANDOM_H AND (HAVE_BOOST_RANDOM OR DOESNT_NEED_BOOST_RANDOM_LIB))
         set (SHENIDAM_ENABLE_TEST_MODE 1)
-        set (EXTRA_LIBS ${EXTRA_LIBS} boost_random)
+	if (NOT DOESNT_NEED_BOOST_RANDOM_LIB)
+	        set (EXTRA_LIBS ${EXTRA_LIBS} boost_random)
+	endif()
     else()
         if (NOT HAVE_BOOST_RANDOM_H)
             message(WARNING "No boost::random headers available.")
@@ -135,6 +148,7 @@ if(WIN32)
     SET(SHENIDAM_BINDIR_REL "bin/")
     SET(SHENIDAM_INCDIR_REL "include/")
     SET(SHENIDAM_INCDIR_REL "lib/")
+    
 else()
     find_package(PythonInterp)
     SET(SHENIDAM_BINDIR_REL "bin/")
@@ -142,13 +156,18 @@ else()
     SET(SHENIDAM_LIBDIR_REL "lib/")
     SET(CMAKE_C_FLAGS "-std=c99 ${CMAKE_C_FLAGS}")
     SET(SHENIDAM_PYTHON_DIR_REL "lib/shenidam/python/")
+    SET(SHENIDAM_DATADIR_REL "share/shenidam/")
     SET(SHENIDAM_PYTHON_DIR "${CMAKE_INSTALL_PREFIX}/${SHENIDAM_PYTHON_DIR_REL}")
 
     configure_file("${PROJECT_SOURCE_DIR}/shenidam-av.in" "${PROJECT_BINARY_DIR}/shenidam-av")
     configure_file("${PROJECT_SOURCE_DIR}/qshenidam.in" "${PROJECT_BINARY_DIR}/qshenidam")
+    configure_file("${PROJECT_SOURCE_DIR}/qshenidam.desktop.in" "${PROJECT_BINARY_DIR}/qshenidam.desktop")
+    
     install (FILES "${PROJECT_BINARY_DIR}/shenidam-av" DESTINATION ${SHENIDAM_BINDIR_REL} PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
     install (FILES "${PROJECT_BINARY_DIR}/qshenidam" DESTINATION ${SHENIDAM_BINDIR_REL} PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
     set_target_properties(shenidam_exec PROPERTIES OUTPUT_NAME "shenidam")
+    install (FILES "${PROJECT_SOURCE_DIR}/icons/qshenidam.svg" "${PROJECT_SOURCE_DIR}/icons/qshenidam_256.png" DESTINATION ${SHENIDAM_DATADIR_REL}/icons)
+    install (FILES "${PROJECT_BINARY_DIR}/qshenidam.desktop" DESTINATION /usr/share/applications)
     
 endif(WIN32)
 
@@ -159,7 +178,7 @@ install (FILES "${PROJECT_SOURCE_DIR}/shenidam.h" DESTINATION ${SHENIDAM_INCDIR_
 install (FILES "${PROJECT_SOURCE_DIR}/shenidam.py" DESTINATION ${SHENIDAM_PYTHON_DIR_REL})
 install (FILES "${PROJECT_SOURCE_DIR}/shenidam-av.py" DESTINATION ${SHENIDAM_PYTHON_DIR_REL})
 install (FILES "${PROJECT_SOURCE_DIR}/qshenidam.py" DESTINATION ${SHENIDAM_PYTHON_DIR_REL})
-
+install (FILES "${PROJECT_BINARY_DIR}/pack/qshenidam_icon.py" DESTINATION ${SHENIDAM_PYTHON_DIR_REL})
 
 
 set(ARCHIVE_NAME shenidam-${SHENIDAM_VERSION})
