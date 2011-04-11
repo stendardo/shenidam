@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.6)
 project(ShenidamAudioMapper)
 
-set(SHENIDAM_VERSION "0.4.9")
+set(SHENIDAM_VERSION "0.5.0")
 set(SHENIDAM_PYTHON_PATH "lib/shenidam/python")
 
 set(EXTRA_LIBS )
