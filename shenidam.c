@@ -192,6 +192,15 @@ static sample_d* resize(sample_d* samples_in, size_t num_samples_in,size_t num_s
 	return res;
 }
 
+static sample_f* resize_f(sample_f* samples_in, size_t num_samples_in,size_t num_samples_out)
+{
+	sample_f* res = (sample_f*)ehmalloc(sizeof(sample_f)*num_samples_out);
+	memset(res,0,sizeof(sample_d)*num_samples_out);
+	int min_num_samples = num_samples_out< num_samples_in?num_samples_out:num_samples_in;
+	memcpy(res,samples_in,min_num_samples*sizeof(sample_f));
+	return res;
+}
+
 typedef union
 {
 	signed char* byte_ptr;
@@ -228,7 +237,7 @@ static int convert_to_samples(int format,void* samples_in,size_t num_samples,sam
 	return 0;
 }
 
-static sample_d* resample(sample_d* samples_in,size_t num_samples_in,double sample_rate_ratio, size_t *num_samples_out)
+static sample_d* resample(sample_d* samples_in,size_t num_samples_in,double sample_rate_ratio, size_t *num_samples_out, int num_threads)
 {
 	SRC_DATA src_data;
 	src_data.data_in = samples_in;
@@ -236,50 +245,9 @@ static sample_d* resample(sample_d* samples_in,size_t num_samples_in,double samp
 	src_data.input_frames = num_samples_in;
 	src_data.output_frames = *num_samples_out;
 	src_data.src_ratio = sample_rate_ratio;
-	src_simple(&src_data,SRC_SINC_FASTEST,1);
+	src_simple(&src_data,SRC_LINEAR,1);
 	*num_samples_out = src_data.output_frames_gen;
 	return src_data.data_out;
-}
-static sample_d* resample_parallel(sample_d* samples_in,size_t num_samples_in,double sample_rate_ratio, size_t *num_samples_out)
-{
-#ifndef SHENIDAM_PARALLEL_OMP
-    return resample(samples_in,num_samples_in,sample_rate_ratio,num_samples_out);
-#else
-    int num_threads = omp_get_num_threads();
-    if(num_threads == 1)
-    {
-        return resample(samples_in,num_samples_in,sample_rate_ratio,num_samples_out);
-    }
-    float **buffers = malloc(sizeof(float*)*num_threads);
-    size_t *buffer_sizes = malloc(sizeof(size_t)*num_threads);
-    size_t *cumulated_buffer_sizes = malloc(sizeof(size_t)*(num_threads+1));
-    size_t slice_size = num_samples_in/num_threads;
-    size_t current_slice_size = slice_size;
-    #pragma omp parallel private(current_slice_size)
-    {
-        int i = omp_get_thread_num();
-        current_slice_size = i == num_threads -1 ? num_samples_in - (i * slice_size):slice_size;
-        buffers[i]=resample(&samples_in[i * slice_size],current_slice_size,sample_rate_ratio,&buffer_sizes[i]);
-    }
-    *num_samples_out = 0;
-    cumulated_buffer_sizes[0]=0;
-    for (size_t j =0; j < num_threads;j++)
-    {
-        *num_samples_out += buffer_sizes[j];
-        cumulated_buffer_sizes[j+1]=cumulated_buffer_sizes[j]+buffer_sizes[j];
-    }
-    sample_d* res = malloc(sizeof(sample_d)*(*num_samples_out));
-    #pragma omp parallel
-    {
-        int i = omp_get_thread_num();
-        memcpy(&res[cumulated_buffer_sizes[i]],&buffers[i], sizeof(sample_d)*buffer_sizes[i]);
-        ehfree(buffers[i]);
-    }
-    free(buffers);
-    free(buffer_sizes);
-    free(cumulated_buffer_sizes);
-    return res;
-#endif
 }
 static size_t get_common_size(size_t minimal_size)
 {
@@ -363,7 +331,7 @@ int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,si
 	}
 	normalize(base,num_samples);
 	size_t num_samples_new = (size_t)round(num_samples * impl->base_sample_rate/sample_rate);
-	temp = resample_parallel(base,num_samples,impl->base_sample_rate/sample_rate,&num_samples_new);
+	temp = resample(base,num_samples,impl->base_sample_rate/sample_rate,&num_samples_new,impl->num_threads);
 	base = temp;
 	impl->base_num_samples = num_samples_new;
 
@@ -409,7 +377,7 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 	if (sample_rate_ratio != 1)
 	{
 		size_t num_samples_temp = (size_t)ceil(num_samples*sample_rate_ratio);
-		temp_d = resample_parallel(track,num_samples,sample_rate_ratio,&num_samples_temp);
+		temp_d = resample(track,num_samples,sample_rate_ratio,&num_samples_temp,impl->num_threads);
 		free(track);
 		track = temp_d;
 		num_samples = num_samples_temp;
