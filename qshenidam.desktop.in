@@ -6,4 +6,4 @@ Comment=Automatic audio track synchronization for filmmakers and such.
 TryExec=qshenidam
 Exec=qshenidam
 Icon=${CMAKE_INSTALL_PREFIX}/${SHENIDAM_DATADIR_REL}/icons/qshenidam_256.png
-
+Categories=AudioVideo
