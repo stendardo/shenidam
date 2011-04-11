@@ -14,7 +14,7 @@ option (ENABLE_TEST_MODE "Enables test mode (requires boost::random)" ON)
 
 INCLUDE (CheckLibraryExists) 
 INCLUDE (CheckIncludeFileCXX)
-
+INCLUDE (CheckCXXSourceCompiles)
 
 if(ENABLE_OPENMP)
     find_package(OpenMP)
@@ -48,7 +48,7 @@ endif()
 
 if (WITH_BOOST_THREAD)
     CHECK_LIBRARY_EXISTS(boost_thread _init "" HAVE_BOOST_THREAD)
-    CHECK_INCLUDE_FILE_CXX("boost/thread.hpp" HAVE_BOOST_THREAD_H)
+    CHECK_INCLUDE_FILE_CXX( "boost/thread.hpp" HAVE_BOOST_THREAD_H)
 
 
     if (HAVE_BOOST_THREAD_H AND HAVE_BOOST_THREAD)
@@ -65,7 +65,20 @@ if (WITH_BOOST_THREAD)
 
 endif()
 if (ENABLE_TEST_MODE)
-    CHECK_LIBRARY_EXISTS(boost_random _init "" HAVE_BOOST_RANDOM)
+    CHECK_CXX_SOURCE_COMPILES( "#include \"boost/random.hpp\"
+boost::mt19937 gen;
+int main(int argc, char** argv)
+{
+	boost::normal_distribution<> dist(0, 1);
+	boost::variate_generator<boost::mt19937&, boost::normal_distribution<> > die(gen, dist);
+	die();
+	return 0;
+}
+
+" HAVE_BOOST_RANDOM)
+    if (NOT HAVE_BOOST_RANDOM)
+    	CHECK_LIBRARY_EXISTS(boost_random _init "" HAVE_BOOST_RANDOM)
+    endif()
     CHECK_INCLUDE_FILE_CXX("boost/random.hpp" HAVE_BOOST_RANDOM_H)
     if (HAVE_BOOST_RANDOM_H AND HAVE_BOOST_RANDOM)
         set (SHENIDAM_ENABLE_TEST_MODE 1)
@@ -108,7 +121,7 @@ endif()
 include_directories ("${PROJECT_SOURCE_DIR}/include")
 add_library(shenidam SHARED shenidam.c)
 add_executable(shenidam_exec shenidam.c shenidam_main.cpp)
-target_link_libraries(shenidam_exec boost_random boost_thread fftw3f samplerate sndfile m ${EXTRA_LIBS})
+target_link_libraries(shenidam_exec fftw3f samplerate sndfile m ${EXTRA_LIBS})
 configure_file("${PROJECT_SOURCE_DIR}/config.h.in" "${PROJECT_BINARY_DIR}/config.h")
 include_directories("${PROJECT_BINARY_DIR}")#for config.h
 
