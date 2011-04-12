@@ -23,6 +23,7 @@
 
 #include <complex.h>
 #include <fftw3.h>
+#include <samplerate.h>
 
 
 #ifdef __cplusplus
@@ -65,6 +66,14 @@ enum SHENIDAM_ERROR_CODES
 shenidam_t shenidam_create(double base_sample_rate,int num_threads);
 
 /**
+ * Sets the resampling quality of the shenidam object
+ * 
+ * @param shenidam_obj the shenidam object.
+ * @param src_converter the libsamplerate converter to use (taken from samplerate.h)
+ * @return SUCCESS or error code.
+ */
+int shenidam_set_resampling_quality(shenidam_t res,int src_converter);
+/**
  * Sets the 1-channel "base" audio track (with a certain format, sample (LPCM) buffer, number of samples and sample rate), on which positions will be calculated.
  * 
  * @param shenidam_obj the shenidam object.
@@ -72,9 +81,9 @@ shenidam_t shenidam_create(double base_sample_rate,int num_threads);
  * @param samples the base samples in the specified format.
  * @param num_samples the number of samples.
  * @param sample_rate the base sample rate.
- * @return SUCCESS on error code.
+ * @return SUCCESS or error code.
  */
-int shenidam_set_base_audio(shenidam_t res,int format, void* samples,size_t num_samples,double sample_rate);
+int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,size_t num_samples,double sample_rate);
 
 /**
  * Sets the 1-channel "track" (with a certain format, sample (LPCM) buffer, number of samples and sample rate) of which we calculate the start position (in_point) and actual duration in n terms of samples (length).

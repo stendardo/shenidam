@@ -35,7 +35,7 @@
 
 
 #include "shenidam.h"
-
+#include "samplerate.h"
 #include "sndfile.h"
 
 
@@ -88,7 +88,7 @@ int num_tries = 5;
 bool return_only = false;
 bool version = false;
 int num_threads = 1;
-
+int src_converter = SRC_SINC_FASTEST;
 boost::mt19937 gen(std::time(0));
 
 
@@ -338,6 +338,34 @@ int parse_options(int argc, char** argv)
                 return 1;
             }
         }
+        else if (arg == "-rq" || arg == "--resampling-quality")
+        {
+			if (i == argc) return 1;
+            int quality = strtol(argv[i++],NULL,10);
+			switch (quality)
+			{
+				case 0:
+					src_converter = SRC_ZERO_ORDER_HOLD;
+					break;
+				case 1:
+					src_converter = SRC_LINEAR;
+					break;
+				case 2:	
+					src_converter = SRC_SINC_FASTEST;
+					break;
+				case 3:
+					src_converter = SRC_SINC_MEDIUM_QUALITY;
+					break;
+				case 4:
+					src_converter = SRC_SINC_BEST_QUALITY;
+					break;
+				default:
+				{
+					fprintf(stderr,"ERROR: Invalid quality. Range is from 0 to 4.!\n");
+					return 1;
+				}
+			}
+		}
         else if (arg == "-tt" || arg == "--test-threshold")
         {
             if (i == argc) return 1;
@@ -379,11 +407,12 @@ void usage()
 			"\t-o\t--output [filename_1 .. filename_n]\n\t\tset the n output tracks\n\n"
 			"\t-d\t--default-output [filename_1 .. filename_n]\n\t\tset the n output tracks\n\n"
 			"\t-m\t--output-mapping [filename_1 .. filename_n]\n\t\toutput the mapping sample in-position and length\n\n"
+			"\t-rq\t--resampling-quality [0-4]\n\t\tResampling quality (higher takes longer and is more precise. Default is 2.)\n\n"
 			"\t-s\t--sample-rate real\n\t\tSample rate for audio processing (default 16000, more means more memory and cpu cycles and potentially more precise calculation).\n\n"
 			"\t-t\t--test\n\t\ttest mode (requires only base). Tests critical noise boundary according to number of tries and threshold.\n\n"
 			"\t-nt\t--num-tries integer\n\t\tNumber of tries for test mode (default 5). More means more precise boundary and processing time.\n\n"
 			"\t-tt\t--test-threshold real\n\t\tThreshold for determining a correct match in test mode (Default 1 second)\n\n"
-			"\t-ta\t--test-track-size real\n\t\tSize in seconds of generated track for test mode (Default 120s, needs to be less than the audio signal's length.)\n\n"
+			"\t-ts\t--test-track-size real\n\t\tSize in seconds of generated track for test mode (Default 120s, needs to be less than the audio signal's length.)\n\n"
 			"\t-c\t--can-open-base\n\t\tTest to see if the base can be opened (and return a non-zero value if not)\n\n"
 			"\t-V\t--version\n\t\tPrint shenidam version and return success\n\n"
 			"\t-r\t--shenidam-return-only\n\t\tDo nothing and return success (check and see if the executable works)\n\n"
@@ -398,6 +427,7 @@ std::string get_default_output_filename(std::string input_filename)
 int process_audio()
 {
 	shenidam_t processor = shenidam_create(sample_rate,num_threads);
+	shenidam_set_resampling_quality(processor,src_converter);
 	SF_INFO base_info;
 	std::memset(&base_info,0,sizeof(SF_INFO));
 	SNDFILE* base = sf_open(base_filename.c_str(),SFM_READ,&base_info);
@@ -531,6 +561,7 @@ bool test_n(shenidam_t processor, float* base,size_t total_num_samples,double sa
 int do_test()
 {
 	shenidam_t processor = shenidam_create(sample_rate,num_threads);
+	shenidam_set_resampling_quality(processor,src_converter);
 	SF_INFO base_info;
 	std::memset(&base_info,0,sizeof(SF_INFO));
 	SNDFILE* base = sf_open(base_filename.c_str(),SFM_READ,&base_info);

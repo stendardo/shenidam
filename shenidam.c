@@ -52,6 +52,7 @@ typedef struct
 	sample_d* base;
 	size_t base_num_samples;
 	int num_threads;
+	int src_converter;
 } shenidam_t_impl ;
 
 
@@ -237,7 +238,7 @@ static int convert_to_samples(int format,void* samples_in,size_t num_samples,sam
 	return 0;
 }
 
-static sample_d* resample(sample_d* samples_in,size_t num_samples_in,double sample_rate_ratio, size_t *num_samples_out, int num_threads)
+static sample_d* resample(sample_d* samples_in,size_t num_samples_in,double sample_rate_ratio, size_t *num_samples_out, int num_threads, int src_converter)
 {
 	SRC_DATA src_data;
 	src_data.data_in = samples_in;
@@ -245,7 +246,7 @@ static sample_d* resample(sample_d* samples_in,size_t num_samples_in,double samp
 	src_data.input_frames = num_samples_in;
 	src_data.output_frames = *num_samples_out;
 	src_data.src_ratio = sample_rate_ratio;
-	src_simple(&src_data,SRC_LINEAR,1);
+	src_simple(&src_data,src_converter,1);
 	*num_samples_out = src_data.output_frames_gen;
 	return src_data.data_out;
 }
@@ -282,9 +283,22 @@ shenidam_t shenidam_create(double base_sample_rate,int num_threads)
 	res->base = NULL;
 	res->base_sample_rate = base_sample_rate;
 	res->num_threads = num_threads;
+	res->src_converter = SRC_SINC_FASTEST;
 	return res;
 }
-
+int shenidam_set_resampling_quality(shenidam_t shenidam_obj,int src_converter)
+{
+	if (shenidam_obj == NULL)
+	{
+		return NULL_OBJECT;
+	}
+	shenidam_t_impl* impl =((shenidam_t_impl*)shenidam_obj);
+	if (src_converter < 0 || src_converter > 4)
+	{
+		return INVALID_ARGUMENT;
+	}
+	impl->src_converter = src_converter;
+}
 int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,size_t num_samples,double sample_rate)
 {
 	if (shenidam_obj == NULL)
@@ -307,7 +321,7 @@ int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,si
 	}
 	normalize(base,num_samples);
 	size_t num_samples_new = (size_t)round(num_samples * impl->base_sample_rate/sample_rate);
-	temp = resample(base,num_samples,impl->base_sample_rate/sample_rate,&num_samples_new,impl->num_threads);
+	temp = resample(base,num_samples,impl->base_sample_rate/sample_rate,&num_samples_new,impl->num_threads,impl->src_converter);
 	base = temp;
 	impl->base_num_samples = num_samples_new;
 
@@ -357,7 +371,7 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 	if (sample_rate_ratio != 1)
 	{
 		size_t num_samples_temp = (size_t)ceil(num_samples*sample_rate_ratio);
-		temp_d = resample(track,num_samples,sample_rate_ratio,&num_samples_temp,impl->num_threads);
+		temp_d = resample(track,num_samples,sample_rate_ratio,&num_samples_temp,impl->num_threads,impl->src_converter);
 		free(track);
 		track = temp_d;
 		num_samples = num_samples_temp;
