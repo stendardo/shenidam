@@ -11,7 +11,8 @@ option (ENABLE_FFTW_THREADING "Use FFTW threading support if available (potentia
 option (WITH_BOOST_THREAD "Use boost::thread if available to determine total number of CPUs (effective only when ENABLE_FFTW_THREADING is available)" ON) 
 option (ENABLE_TEST_MODE "Enables test mode (requires boost::random)" ON) 
 
-
+INCLUDE (OptimizeForArchitecture.cmake)
+OptimizeForArchitecture()
 INCLUDE (CheckLibraryExists) 
 INCLUDE (CheckIncludeFileCXX)
 INCLUDE (CheckCXXSourceCompiles)
