@@ -51,8 +51,6 @@ typedef struct
 	double base_real_sample_rate;
 	sample_d* base;
 	size_t base_num_samples;
-	frequential_filter_cb* frequential_filters;
-	void** frequential_filter_data;
 	int num_threads;
 } shenidam_t_impl ;
 
@@ -283,36 +281,8 @@ shenidam_t shenidam_create(double base_sample_rate,int num_threads)
 	shenidam_t_impl* res = (shenidam_t_impl*)malloc(sizeof(shenidam_t_impl));
 	res->base = NULL;
 	res->base_sample_rate = base_sample_rate;
-	res->frequential_filters = (frequential_filter_cb*)malloc(sizeof(frequential_filter_cb));
-	res->frequential_filters[0] = NULL;
-	res->frequential_filter_data = NULL;
 	res->num_threads = num_threads;
 	return res;
-}
-
-int shenidam_add_frequential_filter(shenidam_t shenidam,frequential_filter_cb callback,void* data)
-{
-	if (setjmp(jb))
-	{
-		return ALLOCATION_ERROR;
-	}
-	if (callback == NULL)
-	{
-		return INVALID_ARGUMENT;
-	}
-	shenidam_t_impl* res = (shenidam_t_impl*) shenidam;
-	int n = 0;
-	frequential_filter_cb* cur = res->frequential_filters;
-	while((cur++)!= NULL)
-	{
-		n++;
-	}
-	res->frequential_filters = (frequential_filter_cb*)realloc(res->frequential_filters,sizeof(frequential_filter_cb)*n+2);
-	res->frequential_filter_data = (void**)realloc(res->frequential_filter_data,sizeof(void*)*n+2);
-	res->frequential_filters[n]=callback;
-	res->frequential_filters[n+1]=NULL;
-	res->frequential_filter_data[n]=data;
-	return SUCCESS;
 }
 
 int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,size_t num_samples,double sample_rate)
@@ -410,12 +380,6 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 	ehfree(track);
 	base_f = fft(base,common_size,impl->num_threads);
 	ehfree(base);
-	void** data_p = impl->frequential_filter_data;
-	for(frequential_filter_cb* cur=impl->frequential_filters;(*cur)!=NULL;cur++,data_p++)
-	{
-		(*cur)(track_f,common_size_f,*data_p);
-		(*cur)(base_f,common_size_f,*data_p);
-	}
 	#pragma omp parallel for
 	for (size_t i = 0; i < common_size_f;i++)
 	{
@@ -457,11 +421,6 @@ int shenidam_destroy(shenidam_t shenidam_obj)
 	}
 	shenidam_t_impl* impl =((shenidam_t_impl*)shenidam_obj);
 	ehfree(impl->base);
-	if (impl->frequential_filters[0]!=NULL)
-	{
-		ehfree(impl->frequential_filter_data);
-	}
-	ehfree(impl->frequential_filters);
 	ehfree(impl);
 	return SUCCESS;
 }

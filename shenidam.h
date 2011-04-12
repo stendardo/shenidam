@@ -34,10 +34,6 @@ extern "C" {
  */
 typedef void* shenidam_t;
 /**
- * Frequential filter, taking Fourier coefficients, their size, and extra parameters.
- */
-typedef void (*frequential_filter_cb)(fftwf_complex* frequencies,size_t size,void* data);
-/**
  * The LPCM buffer formats.
  */
 enum SHENIDAM_FORMAT{
@@ -67,10 +63,7 @@ enum SHENIDAM_ERROR_CODES
  * @return an empty shenidam object.
  */
 shenidam_t shenidam_create(double base_sample_rate,int num_threads);
-/**
- * Adds a filter which is applied to the Fourier transforms of both the track and the base.
- */
-int shenidam_add_frequential_filter(shenidam_t shenidam,frequential_filter_cb callback,void* data);
+
 /**
  * Sets the 1-channel "base" audio track (with a certain format, sample (LPCM) buffer, number of samples and sample rate), on which positions will be calculated.
  * 
