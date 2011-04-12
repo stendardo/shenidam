@@ -69,6 +69,8 @@ const char* shenidam_get_error_message(int error)
 		return "Base signal already set";
 	case(BASE_SIGNAL_NOT_SET):
 		return "Base signal not set";
+	case (NULL_OBJECT):
+		return "NULL shenidam object";
 	case(ALLOCATION_ERROR):
 		return "Could not allocate memory";
 	}
@@ -312,9 +314,13 @@ int shenidam_add_frequential_filter(shenidam_t shenidam,frequential_filter_cb ca
 	res->frequential_filter_data[n]=data;
 	return SUCCESS;
 }
+
 int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,size_t num_samples,double sample_rate)
 {
-
+	if (shenidam_obj == NULL)
+	{
+		return NULL_OBJECT;
+	}
 	if (setjmp(jb))
 	{
 		return ALLOCATION_ERROR;
@@ -343,6 +349,10 @@ int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,si
 
 int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samples,size_t num_samples,double sample_rate,int* in_point,size_t* length)
 {
+	if (shenidam_obj == NULL)
+	{
+		return NULL_OBJECT;
+	}
 	if (setjmp(jb))
 	{
 		return ALLOCATION_ERROR;
@@ -437,6 +447,10 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 
 int shenidam_destroy(shenidam_t shenidam_obj)
 {
+	if (shenidam_obj == NULL)
+	{
+		return NULL_OBJECT;
+	}
 	if (setjmp(jb))
 	{
 		return ALLOCATION_ERROR;
