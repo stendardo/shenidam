@@ -5,6 +5,15 @@ set(SHENIDAM_VERSION "0.5.0")
 set(SHENIDAM_PYTHON_PATH "lib/shenidam/python")
 
 set(EXTRA_LIBS )
+IF(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+   SET(CMAKE_BUILD_TYPE RelWithDebInfo)
+ENDIF(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+
+# Select flags.
+SET(CMAKE_CXX_FLAGS "-Wall")
+SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -fprefetch-loop-arrays -funroll-loops")
+SET(CMAKE_CXX_FLAGS_RELEASE "-O2 -funroll-loops -fprefetch-loop-arrays")
+SET(CMAKE_CXX_FLAGS_DEBUG  "-O0 -g")
 
 option (ENABLE_OPENMP  "Use OpenMP for parallel processing if available (potential extra-small speedup on SMP machines - experimental)" OFF) 
 option (ENABLE_FFTW_THREADING "Use FFTW threading support if available (potential significant speedup on SMP machines)" ON) 
@@ -164,8 +173,8 @@ else()
     configure_file("${PROJECT_SOURCE_DIR}/qshenidam.in" "${PROJECT_BINARY_DIR}/qshenidam")
     configure_file("${PROJECT_SOURCE_DIR}/qshenidam.desktop.in" "${PROJECT_BINARY_DIR}/qshenidam.desktop")
     
-    install (FILES "${PROJECT_BINARY_DIR}/shenidam-av" DESTINATION ${SHENIDAM_BINDIR_REL} PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-    install (FILES "${PROJECT_BINARY_DIR}/qshenidam" DESTINATION ${SHENIDAM_BINDIR_REL} PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+    install (PROGRAMS "${PROJECT_BINARY_DIR}/shenidam-av" DESTINATION ${SHENIDAM_BINDIR_REL})
+    install (PROGRAMS "${PROJECT_BINARY_DIR}/qshenidam" DESTINATION ${SHENIDAM_BINDIR_REL})
     set_target_properties(shenidam_exec PROPERTIES OUTPUT_NAME "shenidam")
     install (FILES "${PROJECT_SOURCE_DIR}/icons/qshenidam.svg" "${PROJECT_SOURCE_DIR}/icons/qshenidam_256.png" DESTINATION ${SHENIDAM_DATADIR_REL}/icons)
     install (FILES "${PROJECT_BINARY_DIR}/qshenidam.desktop" DESTINATION /usr/share/applications)
