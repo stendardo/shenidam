@@ -294,7 +294,7 @@ class ShenidamFileProcessor(object):
                 input_fns_to_transcode = [x for (i,x) in enumerate(self.input_tracks) if transcoding_required[i]]
                 self.notifier.update_major()#1 Transcoding base:
                 if self.transcode_base:
-                    self.notfier.set_major_text("Transcoding base")
+                    self.notifier.set_major_text("Transcoding base")
                     self.extract_audio(self.base_fn,base)
                 with TemporaryFile(input_transcoded_fns):
                     output_temp_files = [self.create_temporary_file_name() for x in self.input_tracks]
