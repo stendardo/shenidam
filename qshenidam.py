@@ -19,6 +19,7 @@
 """
 from __future__ import print_function
 from PyQt4 import QtGui,QtCore
+from shenidam import encode as unicode
 import shenidam
 import os
 import threading
@@ -53,7 +54,7 @@ def launch(model):
         except shenidam.CanceledException:
             pass
         except BaseException as e:
-            error = str(e)
+            error = unicode(e)
         finally:
             done = True
     thread = threading.Thread(target=run)
@@ -134,20 +135,20 @@ class FileInput(QtGui.QWidget):
         dialog.setAcceptMode(self.accept_mode)
         if self.file_mode == QtGui.QFileDialog.Directory:
             dialog.setOption(QtGui.QFileDialog.ShowDirsOnly)
-        value = str(self.value())
+        value = unicode(self.value())
         if not value.strip():
             if callable(self.default_folder):
-                value = str(self.default_folder())
+                value = unicode(self.default_folder())
             else:
-                value = str(self.default_folder)
+                value = unicode(self.default_folder)
         if value.strip():
             dialog.setDirectory(value)
 
         if dialog.exec_():
-            latest_directory = os.path.dirname(str(dialog.selectedFiles()[0]))
+            latest_directory = os.path.dirname(unicode(dialog.selectedFiles()[0]))
             self.text_box.setText(dialog.selectedFiles()[0])
     def value(self):
-        return str(self.text_box.text())
+        return unicode(self.text_box.text())
     def text(self):
         return self.value()
     def setValue(self,text):
@@ -171,7 +172,7 @@ class TextBox(QtGui.QWidget):
         box.addWidget(self.text_box,1)
         self.setLayout(box)
     def value(self):
-        return str(self.text_box.text())
+        return unicode(self.text_box.text())
     def text(self):
         return self.value()
     def setValue(self,text):
@@ -232,7 +233,7 @@ class MultipleFileSelectionBox(QtGui.QWidget):
         for x in files:
             self.list_box.addItem(x)
     def value(self):
-        return [str(self.list_box.item(i).text()) for i in range(self.list_box.count())]
+        return [unicode(self.list_box.item(i).text()) for i in range(self.list_box.count())]
 class TableSelectionBox(QtGui.QWidget):
     def __init__(self):
         QtGui.QWidget.__init__(self)
@@ -273,7 +274,7 @@ class TableSelectionBox(QtGui.QWidget):
         self.table.setCellWidget(i,1,y)
         self.table.setCellWidget(i,2,z)
     def value(self):
-        return [[str(self.table.cellWidget(i,0).text()).strip(),self.table.cellWidget(i,1).isChecked(),str(self.table.cellWidget(i,2).text()).strip()] for i in range(self.table.rowCount())]
+        return [[unicode(self.table.cellWidget(i,0).text()).strip(),self.table.cellWidget(i,1).isChecked(),unicode(self.table.cellWidget(i,2).text()).strip()] for i in range(self.table.rowCount())]
 class SingleFileConversionWindow(QtGui.QWidget):
     def __init__(self):
         QtGui.QWidget.__init__(self)
@@ -300,7 +301,7 @@ class SingleFileConversionWindow(QtGui.QWidget):
     def input(self):
         return [self.input_field.value()]
     def output(self):
-        return [[str(self.output_field.value().strip()),self.checkbox.isChecked(),str(self.remix_params_field.text()).strip()]]
+        return [[unicode(self.output_field.value().strip()),self.checkbox.isChecked(),unicode(self.remix_params_field.text()).strip()]]
 class MultipleFileConversionWindow(QtGui.QWidget):
     def __init__(self):
         QtGui.QWidget.__init__(self)
@@ -374,7 +375,7 @@ class Frame(QtGui.QMainWindow):
             shenidam.check_model(model)
         except shenidam.ModelException as e:
             message_box = QtGui.QMessageBox()
-            message_box.setText("ERROR: "+str(e))
+            message_box.setText("ERROR: "+unicode(e))
             message_box.exec_()
             return
         launch(model)
@@ -440,33 +441,33 @@ class PreferencesWindow(QtGui.QDialog):
             with open(get_qshenidam_file_name(),'r')as f:
                 d = json.load(f)
                 if "tmp_dir" in d:
-                    self.tmp_dir_field.setText(str(d["tmp_dir"]))
+                    self.tmp_dir_field.setText(unicode(d["tmp_dir"]))
                 if "output_tmp_dir" in d:
-                    self.output_tmp_dir_field.setText(str(d["output_tmp_dir"]))
+                    self.output_tmp_dir_field.setText(unicode(d["output_tmp_dir"]))
                 if "ffmpeg" in d:
-                    self.ffmpeg_field.setText(str(d["ffmpeg"]))
+                    self.ffmpeg_field.setText(unicode(d["ffmpeg"]))
                 if "shenidam" in d:
-                    self.shenidam_field.setText(str(d["shenidam"]))
+                    self.shenidam_field.setText(unicode(d["shenidam"]))
                 if "shenidam_extra_args" in d:
-                    self.shenidam_extra_args_field.setText(str(d["shenidam_extra_args"]))
+                    self.shenidam_extra_args_field.setText(unicode(d["shenidam_extra_args"]))
                 if "audio_export_params" in d:
-                    self.audio_export_params_field.setText(str(d["audio_export_params"]))
+                    self.audio_export_params_field.setText(unicode(d["audio_export_params"]))
                 if "default_audio_remix_params" in d:
-                    self.default_audio_remix_params_field.setText(str(d["default_audio_remix_params"]))
+                    self.default_audio_remix_params_field.setText(unicode(d["default_audio_remix_params"]))
                 if "default_av_audio_remix_params" in d:
-                    self.default_av_audio_remix_params_field.setText(str(d["default_av_audio_remix_params"]))
+                    self.default_av_audio_remix_params_field.setText(unicode(d["default_av_audio_remix_params"]))
         except Exception:
             self.first_time = True
     def data(self):
         return {
-        "tmp_dir":str(self.tmp_dir_field.text()),
-        "ffmpeg":str(self.ffmpeg_field.text()),
-        "shenidam":str(self.shenidam_field.text()),
-        "shenidam_extra_args":str(self.shenidam_extra_args_field.text()),
-        "audio_export_params":str(self.audio_export_params_field.text()),
-        "output_tmp_dir":str(self.output_tmp_dir_field.text()),
-        "default_audio_remix_params":str(self.default_audio_remix_params_field.text()),
-        "default_av_audio_remix_params":str(self.default_av_audio_remix_params_field.text())
+        "tmp_dir":unicode(self.tmp_dir_field.text()),
+        "ffmpeg":unicode(self.ffmpeg_field.text()),
+        "shenidam":unicode(self.shenidam_field.text()),
+        "shenidam_extra_args":unicode(self.shenidam_extra_args_field.text()),
+        "audio_export_params":unicode(self.audio_export_params_field.text()),
+        "output_tmp_dir":unicode(self.output_tmp_dir_field.text()),
+        "default_audio_remix_params":unicode(self.default_audio_remix_params_field.text()),
+        "default_av_audio_remix_params":unicode(self.default_av_audio_remix_params_field.text())
         }
     def save(self):
         with open(get_qshenidam_file_name(),'w')as f:

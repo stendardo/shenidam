@@ -19,6 +19,7 @@
 """
 from __future__ import print_function
 from __future__ import division
+from __future__ import unicode_literals
 import threading
 import sys
 import re
@@ -27,6 +28,7 @@ import subprocess
 import os.path
 import shutil
 import tempfile
+import codecs
 try:
     import Queue as squeue
 except ImportError:
@@ -38,6 +40,20 @@ except ImportError:
 
 import shlex
 
+_encoding = sys.getfilesystemencoding().lower() or "utf-8"
+
+def encode(string):
+    if isinstance(string,str):
+        try:
+            return unicode(string,_encoding)
+        except UnicodeEncodeError:
+            return unicode(string,'latin-1')
+    return unicode(string)
+    
+def encode_if_string(string):
+    if isinstance(string,basestring):
+        return encode(string)
+    return string
 NUM_PATTERN = re.compile("{seq(?:/(\d+))?}")
 BASENAME_PATTERN = re.compile("{file}")
 BASENAME_NOEXT_PATTERN = re.compile("{base}")
@@ -58,13 +74,14 @@ class StreamReader(threading.Thread):
         super(StreamReader,self).__init__()
     def run(self):
         try:
-            line = self.stream.readline();
+            line = encode(self.stream.readline());
             while line:
                 for callback in self.callbacks:
                     callback(line)
-                line = self.stream.readline();
+                line = encode(self.stream.readline());
         except BaseException as e:
             self.queue.put(e)
+            
 class ProcessRunner(object):
     def __init__(self,command,stdout_callback=do_nothing,stderr_callback=do_nothing,periodic_notifier=do_nothing):
         self.command = command
@@ -72,12 +89,13 @@ class ProcessRunner(object):
         self.stderr_callback = stderr_callback
         self.periodic_notifier = periodic_notifier
     def __call__(self):
-        stdout_sio = StringIO.StringIO()
-        stderr_sio = StringIO.StringIO()
+        stdout_sio = codecs.getwriter(_encoding)(StringIO.StringIO())
+        stderr_sio = codecs.getwriter(_encoding)(StringIO.StringIO())
         process = None
         exception_queue = squeue.Queue()
+        print(repr(self.command))
+        process = subprocess.Popen(shlex.split(self.command.encode(_encoding)),bufsize=1,stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False)
         try:
-            process = subprocess.Popen(shlex.split(self.command),bufsize=1,stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False)
             stdout_reader = StreamReader([forward(stdout_sio),self.stdout_callback],process.stdout,exception_queue)
             stderr_reader = StreamReader([forward(stderr_sio),self.stderr_callback],process.stderr,exception_queue)
             stdout_reader.start();
@@ -85,6 +103,7 @@ class ProcessRunner(object):
             while process.poll() is None:
                 try:
                     exception = exception_queue.get(timeout=0.1)
+                    print(repr(exception))
                 except squeue.Empty:
                     pass
                 else:
@@ -117,7 +136,7 @@ class Shenidam(object):
             if line.startswith("MESSAGE:"):
                 return message_callback(line,_parse_event(line))
         self.output_callback = mycallback
-        self.executable = executable
+        self.executable = encode(executable)
         self.extra_args = extra_args
         self.error_callback = error_callback
         self.periodic_notifier = periodic_notifier
@@ -126,19 +145,19 @@ class Shenidam(object):
             raise ValueError("No input tracks")
         if len(output_tracks) > 0 and len(input_tracks) != len(output_tracks):
             raise ValueError("Invalid number of input tracks")
-        args= "-i "
+        args= u"-i "
         for x in input_tracks:
-            args+= "\"{0}\" ".format(x)
+            args+= "\"{0}\" ".format(encode(x))
         if len(output_tracks)>0:
             args+= "-o "
             for x in output_tracks:
-                args+= "\"{0}\" ".format(x)
-        cmd = "\"{executable}\" -m {extra_args} -n {numargs} -b \"{base}\" {args}".format(executable=self.executable,base=base,numargs=len(input_tracks),args=args,extra_args=self.extra_args)
+                args+= "\"{0}\" ".format(encode(x))
+        cmd = "\"{executable}\" -m {extra_args} -n {numargs} -b \"{base}\" {args}".format(executable=self.executable,base=base,numargs=len(input_tracks),args=args,extra_args=encode(self.extra_args))
         res,stdout,stderr = ProcessRunner(cmd,self.output_callback,self.error_callback,self.periodic_notifier)()
         return cmd,res,stdout,stderr
     def can_open(self,filename):
-        cmd = "\"{executable}\" -b \"{filename}\" -c".format(executable=self.executable,filename=filename)
-        return not subprocess.call(shlex.split(cmd),stdin=None,stdout=None,stderr=None,shell=False)
+        cmd = "\"{executable}\" -b \"{filename}\" -c".format(executable=encode(self.executable),filename=encode(filename))
+        return not subprocess.call(shlex.split(cmd.encode(_encoding)),stdin=None,stdout=None,stderr=None,shell=False)
 class SubprocessError(Exception):
     def __init__(self,error):
         super(SubprocessError,self).__init__(error)
@@ -179,13 +198,14 @@ class StreamNotifier(object):
 class CanceledException(Exception):
     pass
 def filename_from_pattern(i,filename,pattern):
+    filename = encode(filename)
     basename = os.path.basename(filename)
     basename_noext,ext = os.path.splitext(basename)
     dirname = os.path.dirname(filename)
     if dirname == "":
         dirname="."
     def repl(matchobj):
-        x = str(i)
+        x = encode(i)
         if (matchobj.group(1) is None):
             return x
         n = int(matchobj.group(1))
@@ -255,7 +275,7 @@ class ShenidamFileProcessor(object):
         self.ffmpeg = model.ffmpeg
         self.shenidam_extra_args = model.shenidam_extra_args
         self.shenidam = model.shenidam
-        self.ffmpeg = model.ffmpeg
+        self.ffmpeg = encode(model.ffmpeg)
         self.verbose = not model.quiet and model.verbose
         self.quiet = model.quiet
         self.notifier = notifier
@@ -335,7 +355,7 @@ class ShenidamFileProcessor(object):
     
 
     def raise_subprocess_error(self,cmd,stderr,show_error=True):
-        raise SubprocessError("Command '{cmd}' failed{error}".format(cmd=cmd,error=(", error stream was:\n"+stderr) if show_error else ""))
+        raise SubprocessError("Command '{cmd}' failed{error}".format(cmd=cmd,error=(", error stream was:\n"+encode(stderr)) if show_error else ""))
     def run_command(self,cmd):
         try:
             stderr_forward = forward(sys.stderr) if self.verbose else do_nothing;
@@ -344,9 +364,9 @@ class ShenidamFileProcessor(object):
             if res != 0:
                 self.raise_subprocess_error(cmd,stderr)
         except OSError as e:
-            self.raise_subprocess_error(cmd,str(e))
+            self.raise_subprocess_error(cmd,unicode(e))
     def extract_audio(self,avfilename,outfn):
-        self.run_command("\"{exec_}\" -y -v 0 -loglevel error -i \"{avfilename}\" -vn {audio_export_params} \"{outfn}\"".format(exec_=self.ffmpeg,avfilename=avfilename,outfn=outfn,audio_export_params=self.audio_export_params))
+        self.run_command("\"{exec_}\" -y -v 0 -loglevel error -i \"{avfilename}\" -vn {audio_export_params} \"{outfn}\"".format(exec_=self.ffmpeg,avfilename=encode(avfilename),outfn=encode(outfn),audio_export_params=encode(self.audio_export_params)))
 
     def run_shenidam(self,base_fn,track_fns,output_fns):
         try:
@@ -357,21 +377,21 @@ class ShenidamFileProcessor(object):
             if res != 0:
                 self.raise_subprocess_error(cmd,stderr)
         except OSError as e:
-            self.raise_subprocess_error(cmd,str(e))
+            self.raise_subprocess_error(cmd,unicode(e))
 
     def remix_audio(self,avfilename,track_fn,output_fn,audio_only,audio_remix_params):
         if audio_remix_params is None or audio_remix_params.strip() == "default":
             audio_remix_params = self.default_audio_remix_params if audio_only else self.default_av_audio_remix_params
         if audio_only:
-            self.run_command("\"{ffmpeg}\" -y -v 0 -loglevel error -i \"{track_fn}\" {audio_remix_params} \"{output_fn}\"".format(ffmpeg = self.ffmpeg, track_fn=track_fn,output_fn=output_fn,audio_remix_params=audio_remix_params))
+            self.run_command("\"{ffmpeg}\" -y -v 0 -loglevel error -i \"{track_fn}\" {audio_remix_params} \"{output_fn}\"".format(ffmpeg = self.ffmpeg, track_fn=encode(track_fn),output_fn=encode(output_fn),audio_remix_params=encode(audio_remix_params)))
         else:
-            self.run_command("\"{ffmpeg}\" -y -v 0 -loglevel error -i \"{avfilename}\" -i \"{track_fn}\" -map 0:0 -map 1:0  {audio_remix_params} \"{output_fn}\"".format(ffmpeg = self.ffmpeg, avfilename=avfilename,track_fn=track_fn,output_fn=output_fn,audio_remix_params=audio_remix_params))
+            self.run_command("\"{ffmpeg}\" -y -v 0 -loglevel error -i \"{avfilename}\" -i \"{track_fn}\" -map 0:0 -map 1:0  {audio_remix_params} \"{output_fn}\"".format(ffmpeg = self.ffmpeg, avfilename=encode(avfilename),track_fn=encode(track_fn),output_fn=encode(output_fn),audio_remix_params=encode(audio_remix_params)))
 class FileProcessorModel(object):
     audio_export_params="-acodec pcm_s24le -f wav"
     transcode_base = None
     tmp_dir=tempfile.gettempdir()
-    shenidam="shenidam"
-    ffmpeg="ffmpeg"
+    shenidam=u"shenidam"
+    ffmpeg=u"ffmpeg"
     shenidam_extra_args=""
     quiet=False
     verbose=False
@@ -382,6 +402,8 @@ class FileProcessorModel(object):
     def __init__(self):
         self.output_params=[]
         self.input_tracks = []
+    def __setattr__(self,key,value):
+        return super(FileProcessorModel,self).__setattr__(key,encode_if_string(value))
 class ModelException(Exception):
     pass
 def check_file_write(path):

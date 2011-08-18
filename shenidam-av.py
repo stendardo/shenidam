@@ -18,6 +18,7 @@
 
 """
 from __future__ import print_function
+from __future__ import unicode_literals
 import uuid
 import sys
 import subprocess
@@ -26,6 +27,7 @@ import os.path
 import tempfile
 import shutil
 import shenidam
+unicode = shenidam.encode
 FFMPEG = "ffmpeg"
 SHENIDAM = "shenidam"
 AUDIO_REMIX_PARAMS = None
@@ -48,7 +50,7 @@ class SubprocessError(Exception):
     def __init__(self,error):
         super(SubprocessError,self).__init__(error)
 def raise_subprocess_error(cmd,stderr,show_error=True):
-    raise SubprocessError("Command '{cmd}' failed{error}".format(cmd=cmd,error=(", error stream was:\n"+stderr) if show_error else ""))
+    raise SubprocessError("Command '{cmd}' failed{error}".format(cmd=cmd,error=(", error stream was:\n"+encode(stderr)) if show_error else ""))
 def run_command(cmd):
     
     try:
@@ -86,7 +88,7 @@ def parse_params(model):
     audio_only = False
     audio_remix_params = None
     while i < argc:
-        arg = argv[i].strip()
+        arg = unicode(argv[i].strip())
         i+=1
         if arg == "-v" or arg == "--verbose":
             model.verbose = True
@@ -97,46 +99,46 @@ def parse_params(model):
         elif arg == "-se" or arg == "--shenidam-executable":
             if i >= argc:
 	            return 1
-            model.shenidam = argv[i].strip()
+            model.shenidam = unicode(argv[i].strip())
             i+=1;
         elif arg == "-fe" or arg == "--ffmpeg-executable":
             if i >= argc:
 	            return 1;
-            model.ffmpeg = argv[i].strip()
+            model.ffmpeg = unicode(argv[i].strip())
             i+=1
         elif arg == "-tb" or arg == "--transcode-base":
             model.transcode_base = True
         elif arg == "-sp" or arg == "--shenidam-params":
             if i >= argc:
 	            return 1;
-            model.shenidam_extra_args = argv[i].strip()
+            model.shenidam_extra_args = unicode(argv[i].strip())
             i+=1
         elif arg == "-ntb" or arg == "--no-transcode-base":
             model.transcode_base = False
         elif arg == "-o" or arg == "--output":
             if i >= argc:
 	            return 1;
-            output_pattern = argv[i].strip()
+            output_pattern = unicode(argv[i].strip())
             i+=1
         elif arg == "-b" or arg == "--base":
             if i >= argc:
 	            return 1;
-            model.base_fn = argv[i].strip()
+            model.base_fn = unicode(argv[i].strip())
             i+=1
         elif arg == "-aep" or arg == "--audio-export-params":
             if i >= argc:
 	            return 1;
-            model.audio_export_params = argv[i].strip()
+            model.audio_export_params = unicode(argv[i].strip())
             i+=1
         elif arg == "-arp" or arg == "--audio-remix-params":
             if i >= argc:
 	            return 1;
-            audio_remix_params = argv[i].strip()
+            audio_remix_params = unicode(argv[i].strip())
             i+=1
         elif arg == "-td" or arg == "--temporary-directory":
             if i >= argc:
 	            return 1;
-            model.tmp_dir = argv[i].strip()
+            model.tmp_dir = unicode(argv[i].strip())
             i+=1
         else:
             i-=1;
@@ -144,13 +146,13 @@ def parse_params(model):
     if i == argc:
         return 1;
     for j in range(i,argc):
-        model.input_tracks.append(argv[j].strip())
+        model.input_tracks.append(unicode(argv[j].strip()))
     if audio_remix_params is None:
         audio_remix_params = "-vcodec copy -acodec copy" if not audio_only else "-acodec copy"
     model.output_params = [[output_pattern,audio_only,audio_remix_params]]
     return 0;
-def error(str):
-    return print(str,file=sys.stderr)
+def error(string):
+    return print(string,file=sys.stderr)
 def check_params(model):
     if model.quiet:
         model.verbose = False
@@ -169,10 +171,10 @@ def check_params(model):
     try:
         shenidam.check_model(model)
     except shenidam.ModelException as e:
-        error("ERROR: "+str(e))
+        error("ERROR: "+unicode(e))
     return 0
 def usage():
-    error("""USAGE :{0} [options] av_track_1 ... av_track_n
+    error(u"""USAGE :{0} [options] av_track_1 ... av_track_n
 Options:
 -a / --audio-only : do not copy any video information into the output files.
 
