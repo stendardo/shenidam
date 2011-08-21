@@ -493,7 +493,7 @@ int process_audio()
 	return 0;
 }
 
-int can_open_base()
+int file_info()
 {
     SF_INFO base_info;
 	std::memset(&base_info,0,sizeof(SF_INFO));
@@ -503,7 +503,12 @@ int can_open_base()
 	    send_message("cannot-open-file","file",base_filename);
 	    return 1;
 	}
-	send_message("can-open-file","file",base_filename);
+	std::map<std::string,std::string> kv;
+    kv["file"]=base_filename;
+    kv["channels"]= to_string(base_info.channels);
+    kv["sample_rate"]= to_string(base_info.samplerate);
+    kv["length"]= to_string(base_info.frames);
+	send_message("can-open-file",kv);
 	sf_close(base);
 	return 0;
 }
@@ -658,7 +663,7 @@ int main(int argc, char **argv) {
 	}
 	else if (can_open_mode)
 	{
-	    return can_open_base();
+	    return file_info();
 	}
 	else
 	{
