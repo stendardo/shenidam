@@ -191,13 +191,14 @@ int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,int in, 
 		sf_writef_float(out,frame,1);
 		j++;
 	}
-	for(size_t i = 0; i < end; i++)
+	for(size_t i = 0; i < end ; i+=1024)
 	{
-	    size_t frames_to_transfer = end -j;
+	    size_t frames_to_transfer = end -i;
 	    frames_to_transfer = frames_to_transfer>1024?1024:frames_to_transfer;
 		sf_readf_float(sndfile,frame,frames_to_transfer);
 		sf_writef_float(out,frame,frames_to_transfer);
 		j+=frames_to_transfer;
+		
 	}
 	std::memset(frame,0,sizeof(float)*info_in->channels*1024);
 	for(; j < sample_length; j++)
@@ -406,7 +407,7 @@ void usage()
 			"\t-i\t--input [filename_1 .. filename_n]\n\t\tset the n input tracks\n\n"
 			"\t-o\t--output [filename_1 .. filename_n]\n\t\tset the n output tracks\n\n"
 			"\t-d\t--default-output [filename_1 .. filename_n]\n\t\tset the n output tracks\n\n"
-			"\t-m\t--output-mapping [filename_1 .. filename_n]\n\t\toutput the mapping sample in-position and length\n\n"
+			"\t-m\t--send_messages [filename_1 .. filename_n]\n\t\tSend messages/events to standard output\n\n"
 			"\t-rq\t--resampling-quality [0-4]\n\t\tResampling quality (higher takes longer and is more precise. Default is 2.)\n\n"
 			"\t-s\t--sample-rate real\n\t\tSample rate for audio processing (default 16000, more means more memory and cpu cycles and potentially more precise calculation).\n\n"
 			"\t-t\t--test\n\t\ttest mode (requires only base). Tests critical noise boundary according to number of tries and threshold.\n\n"
