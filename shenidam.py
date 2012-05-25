@@ -263,6 +263,7 @@ class CancelableProgressNotifier(object):
             raise CanceledException()
     def cancel(self):
         self.canceled = True
+            
 class ShenidamFileProcessor(object):
     def __init__(self,model,notifier):
         self.base_fn = model.base_fn
@@ -272,16 +273,19 @@ class ShenidamFileProcessor(object):
         self.tmp_dir = model.tmp_dir
         self.output_tmp_dir = model.output_tmp_dir if model.output_tmp_dir is not None else self.tmp_dir
         self.shenidam = model.shenidam
-        self.ffmpeg = model.ffmpeg
+        self.avconv = model.avconv
+        self.has_mapped_output = model.has_mapped_output
+        self.output_mapping = model.output_mapping
         self.shenidam_extra_args = model.shenidam_extra_args
         self.shenidam = model.shenidam
-        self.ffmpeg = encode(model.ffmpeg)
+        self.avconv = encode(model.avconv)
         self.verbose = not model.quiet and model.verbose
         self.quiet = model.quiet
         self.notifier = notifier
+        self.mapping = []
         self.audio_export_params = model.audio_export_params
-        self.default_audio_remix_params = model.default_audio_remix_params if model.default_audio_remix_params is not None else "-acodec copy"
-        self.default_av_audio_remix_params = model.default_av_audio_remix_params if model.default_av_audio_remix_params is not None else "-vcodec copy -acodec copy"
+        self.default_audio_remix_params = model.default_audio_remix_params if model.default_audio_remix_params is not None else "-c:a copy"
+        self.default_av_audio_remix_params = model.default_av_audio_remix_params if model.default_av_audio_remix_params is not None else "-v:a copy -c:a copy"
     def create_temporary_file_name(self,output=False):
         tmp_dir = self.tmp_dir
         if output:
@@ -289,17 +293,20 @@ class ShenidamFileProcessor(object):
         return os.path.join(tmp_dir,"shenidam-av-tmp-"+uuid.uuid4().hex)
     def shenidam_updater(self,line,event):
         if event["MESSAGE"] in ("base-read","track-read","track-position-determined","wrote-file"):
-            assert self.num_converted < len(self.input_tracks)
             self.notifier.update_minor()
             if event["MESSAGE"]=="base-read":
+                self.num_converted = -1
                 self.notifier.set_minor_text("Base file processed")
             elif event["MESSAGE"]=="track-read":
+                self.num_converted+=1
                 self.notifier.set_minor_text("Track '{0}' loaded".format(self.input_tracks[self.num_converted]))
             elif event["MESSAGE"]=="track-position-determined":
                 self.notifier.set_minor_text("Track '{0}' mapped".format(self.input_tracks[self.num_converted]))
+                self.mapping.append({"file":encode(event["file"]),"determined_in":float(event["determined_in"]),
+                    "determined_length":float(event["determined_length"])})
             elif event["MESSAGE"]=="wrote-file":
                 self.notifier.set_minor_text("Track '{0}' exported ".format(self.input_tracks[self.num_converted]))
-                self.num_converted+=1
+                
     def convert(self):
         try:
             base = self.base_fn
@@ -317,7 +324,10 @@ class ShenidamFileProcessor(object):
                     self.notifier.set_major_text("Transcoding base")
                     self.extract_audio(self.base_fn,base)
                 with TemporaryFile(input_transcoded_fns):
-                    output_temp_files = [self.create_temporary_file_name() for x in self.input_tracks]
+                    if self.has_mapped_output:
+                        output_temp_files = [self.create_temporary_file_name() for x in self.input_tracks]
+                    else:
+                        output_temp_files = []
                     self.notifier.update_major(len(input_fns_to_transcode))#2 Extracting audio:
                     if len(input_fns_to_transcode):
                         self.notifier.set_major_text("Extracting audio")
@@ -326,9 +336,11 @@ class ShenidamFileProcessor(object):
                         self.notifier.set_minor_text("Extracting audio of file '{0}'".format(x))
                         self.extract_audio(x,y)
                     with TemporaryFile(output_temp_files):
-                        self.notifier.update_major(len(input_fns)*3+1)#3 Running shenidam:
+                        self.notifier.update_major(len(input_fns)*2+(len(input_fns) if self.has_mapped_output else 0)+1)#3 Running shenidam:
                         self.notifier.set_major_text("Running shenidam")
                         self.run_shenidam(base,input_fns,output_temp_files)
+                        if not self.has_mapped_output:
+                            return
                         delete_filenames([base],self.transcode_base)
                         delete_filenames(input_transcoded_fns)
                         output_remixed_files = [[filename_from_pattern(ix[0],ix[1],output_pattern) for ix in enumerate(self.input_tracks)] for (output_pattern,d1,d2) in self.output_params]
@@ -366,7 +378,7 @@ class ShenidamFileProcessor(object):
         except OSError as e:
             self.raise_subprocess_error(cmd,unicode(e))
     def extract_audio(self,avfilename,outfn):
-        self.run_command("\"{exec_}\" -y -v 0 -loglevel error -i \"{avfilename}\" -vn {audio_export_params} \"{outfn}\"".format(exec_=self.ffmpeg,avfilename=encode(avfilename),outfn=encode(outfn),audio_export_params=encode(self.audio_export_params)))
+        self.run_command("\"{exec_}\" -y -v 0 -loglevel error -i \"{avfilename}\" -vn {audio_export_params} \"{outfn}\"".format(exec_=self.avconv,avfilename=encode(avfilename),outfn=encode(outfn),audio_export_params=encode(self.audio_export_params)))
 
     def run_shenidam(self,base_fn,track_fns,output_fns):
         try:
@@ -383,25 +395,28 @@ class ShenidamFileProcessor(object):
         if audio_remix_params is None or audio_remix_params.strip() == "default":
             audio_remix_params = self.default_audio_remix_params if audio_only else self.default_av_audio_remix_params
         if audio_only:
-            self.run_command("\"{ffmpeg}\" -y -v 0 -loglevel error -i \"{track_fn}\" {audio_remix_params} \"{output_fn}\"".format(ffmpeg = self.ffmpeg, track_fn=encode(track_fn),output_fn=encode(output_fn),audio_remix_params=encode(audio_remix_params)))
+            self.run_command("\"{avconv}\" -y -v 0 -loglevel error -i \"{track_fn}\" {audio_remix_params} \"{output_fn}\"".format(avconv = self.avconv, track_fn=encode(track_fn),output_fn=encode(output_fn),audio_remix_params=encode(audio_remix_params)))
         else:
-            self.run_command("\"{ffmpeg}\" -y -v 0 -loglevel error -i \"{avfilename}\" -i \"{track_fn}\" -map 0:0 -map 1:0  {audio_remix_params} \"{output_fn}\"".format(ffmpeg = self.ffmpeg, avfilename=encode(avfilename),track_fn=encode(track_fn),output_fn=encode(output_fn),audio_remix_params=encode(audio_remix_params)))
+            self.run_command("\"{avconv}\" -y -v 0 -loglevel error -i \"{avfilename}\" -i \"{track_fn}\" -map 0:v -map 1:a  {audio_remix_params} \"{output_fn}\"".format(avconv = self.avconv, avfilename=encode(avfilename),track_fn=encode(track_fn),output_fn=encode(output_fn),audio_remix_params=encode(audio_remix_params)))
 class FileProcessorModel(object):
-    audio_export_params="-acodec pcm_s24le -f wav"
+    audio_export_params="-c:a pcm_s24le -f wav"
     transcode_base = None
     tmp_dir=tempfile.gettempdir()
     shenidam=u"shenidam"
-    ffmpeg=u"ffmpeg"
-    shenidam_extra_args=""
+    avconv=u"avconv"
+    shenidam_extra_args=u""
     quiet=False
     verbose=False
     base_fn = None
     default_av_audio_remix_params = None
     default_audio_remix_params = None
     output_tmp_dir = None
+    has_mapped_output = True
+    output_mapping = u""
     def __init__(self):
         self.output_params=[]
         self.input_tracks = []
+        self.mapping = []
     def __setattr__(self,key,value):
         return super(FileProcessorModel,self).__setattr__(key,encode_if_string(value))
 class ModelException(Exception):
@@ -424,18 +439,21 @@ def check_model(model):
     check_file_read(model.base_fn)
     if not model.input_tracks:
         raise ModelException("No input tracks")
-    if not model.output_params:
+    if model.has_mapped_output and not model.output_params:
         raise ModelException("No output tracks")
     for x in model.input_tracks:
         check_file_read(x)
-    for y,d1,d2 in model.output_params:
-        for i,x in enumerate(model.input_tracks):
-            check_file_write(filename_from_pattern(i,x,y))
+    if model.has_mapped_output:
+        for y,d1,d2 in model.output_params:
+            for i,x in enumerate(model.input_tracks):
+                check_file_write(filename_from_pattern(i,x,y))
+    if model.output_mapping:
+        check_file_write(model.output_mapping)
     if model.output_tmp_dir is not None and ( not os.path.isdir(model.tmp_dir) or not os.access(model.tmp_dir,os.W_OK)):
         raise ModelException("Cannot write to temporary directory '"+model.tmp_dir+"'")
     if model.output_tmp_dir is not None and ( not os.path.isdir(model.output_tmp_dir) or not os.access(model.output_tmp_dir,os.W_OK)):
         raise ModelException("Cannot write to output temporary directory '"+model.output_tmp_dir+"'")
-    if subprocess.call([model.ffmpeg ,"-version"],stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False):
-        raise ModelException("Cannot run ffmpeg. Check path.")
+    if subprocess.call([model.avconv ,"-version"],stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False):
+        raise ModelException("Cannot run avconv. Check path.")
     if subprocess.call([model.shenidam,"--shenidam-return-only"],stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE,shell=False):
         raise ModelException("Cannot run shenidam. Check path.")

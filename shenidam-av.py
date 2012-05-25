@@ -28,10 +28,10 @@ import tempfile
 import shutil
 import shenidam
 unicode = shenidam.encode
-FFMPEG = "ffmpeg"
+AVCONV = "avconv"
 SHENIDAM = "shenidam"
 AUDIO_REMIX_PARAMS = None
-AUDIO_EXPORT_PARAMS ="-acodec pcm_s24le -f wav"
+AUDIO_EXPORT_PARAMS ="-c:a pcm_s24le -f wav"
 SHENIDAM_PARAMS =""
 INPUT_TRACKS =  []
 BASE_FN = None
@@ -62,7 +62,7 @@ def run_command(cmd):
     except OSError as e:
         raise_subprocess_error(cmd,e)
 def extract_audio(avfilename,outfn):
-    run_command("{exec_} -y -v 0 -loglevel error -i \"{avfilename}\" -vn {audio_export_params} \"{outfn}\"".format(exec_=FFMPEG,avfilename=avfilename,outfn=outfn,audio_export_params=AUDIO_EXPORT_PARAMS))
+    run_command("{exec_} -y -v 0 -loglevel error -i \"{avfilename}\" -vn {audio_export_params} \"{outfn}\"".format(exec_=AVCONV,avfilename=avfilename,outfn=outfn,audio_export_params=AUDIO_EXPORT_PARAMS))
 
 def run_shenidam(base_fn,track_fns,output_fns):
     try:
@@ -76,9 +76,9 @@ def run_shenidam(base_fn,track_fns,output_fns):
 
 def remix_audio(avfilename,track_fn,output_fn):
     if AUDIO_ONLY:
-        run_command("{ffmpeg} -y -v 0 -loglevel error -i \"{track_fn}\" {audio_remix_params} \"{output_fn}\"".format(ffmpeg = FFMPEG, track_fn=track_fn,output_fn=output_fn,audio_remix_params=AUDIO_REMIX_PARAMS))
+        run_command("{avconv} -y -v 0 -loglevel error -i \"{track_fn}\" {audio_remix_params} \"{output_fn}\"".format(avconv = AVCONV, track_fn=track_fn,output_fn=output_fn,audio_remix_params=AUDIO_REMIX_PARAMS))
     else:
-        run_command("{ffmpeg} -y -v 0 -loglevel error -i \"{avfilename}\" -i \"{track_fn}\" -map 0:0 -map 1:0  {audio_remix_params} \"{output_fn}\"".format(ffmpeg = FFMPEG, avfilename=avfilename,track_fn=track_fn,output_fn=output_fn,audio_remix_params=AUDIO_REMIX_PARAMS))
+        run_command("{avconv} -y -v 0 -loglevel error -i \"{avfilename}\" -i \"{track_fn}\" -map 0:0 -map 1:0  {audio_remix_params} \"{output_fn}\"".format(avconv = AVCONV, avfilename=avfilename,track_fn=track_fn,output_fn=output_fn,audio_remix_params=AUDIO_REMIX_PARAMS))
 
 def parse_params(model):
     argv = sys.argv
@@ -92,19 +92,26 @@ def parse_params(model):
         i+=1
         if arg == "-v" or arg == "--verbose":
             model.verbose = True
+        elif arg == "-n" or arg == "-no-av-output":
+            model.has_mapped_output = False
         elif arg == "-a" or arg == "--audio-only":
             audio_only = True
         elif arg == "-q" or arg == "--quiet":
             model.quiet = True
+        elif arg == "-m" or arg == "--output-mapping":
+            if i >= argc:
+                return 1
+            model.output_mapping = unicode(argv[i].strip())
+            i+=1
         elif arg == "-se" or arg == "--shenidam-executable":
             if i >= argc:
 	            return 1
             model.shenidam = unicode(argv[i].strip())
             i+=1;
-        elif arg == "-fe" or arg == "--ffmpeg-executable":
+        elif arg == "-ae" or arg == "--avconv-executable":
             if i >= argc:
 	            return 1;
-            model.ffmpeg = unicode(argv[i].strip())
+            model.avconv = unicode(argv[i].strip())
             i+=1
         elif arg == "-tb" or arg == "--transcode-base":
             model.transcode_base = True
@@ -146,9 +153,10 @@ def parse_params(model):
     if i == argc:
         return 1;
     for j in range(i,argc):
+        print(argv[j].strip())
         model.input_tracks.append(unicode(argv[j].strip()))
     if audio_remix_params is None:
-        audio_remix_params = "-vcodec copy -acodec copy" if not audio_only else "-acodec copy"
+        audio_remix_params = "-c:v copy -c:a copy" if not audio_only else "-c:a copy"
     model.output_params = [[output_pattern,audio_only,audio_remix_params]]
     return 0;
 def error(string):
@@ -163,7 +171,7 @@ def check_params(model):
         error("ERROR: No tracks defined.")
         return 1;
     op = model.output_params[0][0]
-    if op is None or len(op) == 0:
+    if model.has_mapped_output and (op is None or len(op) == 0):
         error("ERROR: No output defined.")
         return 1;
     if model.transcode_base is None:
@@ -178,33 +186,45 @@ def usage():
 Options:
 -a / --audio-only : do not copy any video information into the output files.
 
+-n / --no-av-output : do not output any av-files.
+
+-m / --output-mapping filename : output a tab-separated file containing the determined position and length of each file wrt the base track.
+
 -b / --base filename : determine the base audio (or audio-visual) file (to which the tracks will be matched) MANDATORY
 
--o / --output pattern: determine the pattern of output filenames. Patterns can include the strings {{seq}} (or {{seq/d}} where d is the minimum number of digits), {{file}}, {{base}}, {{ext}} (which includes the starting period) and {{dir}} MANDATORY
+-o / --output pattern: determine the pattern of output filenames. Patterns can include the strings {{seq}} (or {{seq/d}} where d is the minimum number of digits - which default to 0), {{file}}, {{base}}, {{ext}} (which includes the starting period) and {{dir}} MANDATORY
 
 -td / --temporary-directory : The temporary directory in which to store the extracted audio files (default is the machine's temporary directory)
 
--tb / --transcode-base or --ntb / --no-transcode-base : Force transcoding (resp. no transcoding) of the base file (default is to transcode except for a file for which transcoding is not possible)
+-tb / --transcode-base or --ntb / --no-transcode-base : Force transcoding (resp. no transcoding) of the base file (default is not to transcode except for a file for which transcoding is necessary)
 
--aep / --audio-export-params quoted_param_string : parameters to pass to ffmpeg while exporting. Requires format, and sometimes codec. (default "-acodec pcm_s24le -f wav")
+-aep / --audio-export-params quoted_param_string : parameters to pass to avconv while exporting. Requires format, and sometimes codec. (default "-c:a pcm_s24le -f wav")
 
--arp / --audio-remix-params quoted_param_string : parameters to pass to ffmpeg while remixing (replacing the audio from the tracks with shenidam's output). Should set at least -acodec (and -vcodec if -a is not set)  (default : if -a is set "-acodec copy", otherwise "-vcodec copy -acodec copy")
+-arp / --audio-remix-params quoted_param_string : parameters to pass to avconv while remixing (replacing the audio from the tracks with shenidam's output). Should set at least -c:a (and -c:v if -a is not set)  (default : if -a is set "-c:a copy", otherwise "-c:v copy -c:a copy")
 
 -sp / --shenidam-params quoted_param_string : extra parameters to pass to shenidam
 
 -se / --shenidam-executable command: the shenidam executable / command
 
--fe / --ffmpeg-executable command: the ffmpeg executable / command
+-ae / --avconv-executable command: the avconv executable / command
 
 """.format(sys.argv[0]))
 
+def save_mapping(processor):
+    if processor.output_mapping:
+        with open(processor.output_mapping,'w') as f:
+            f.write("FILE\tIN\tLENGTH\n")
+            for filename,x in zip(processor.input_tracks,processor.mapping):
+                f.write("{0}\t{1}\t{2}\n".format(filename,x["determined_in"],x["determined_length"]))
 def main():
     model = shenidam.FileProcessorModel()
     if (parse_params(model) or check_params(model)):
         usage()
         return 1;
-        
-    shenidam.ShenidamFileProcessor(model,shenidam.StreamNotifier(sys.stderr)).convert()
+    
+    processor = shenidam.ShenidamFileProcessor(model,shenidam.StreamNotifier(sys.stderr))
+    processor.convert()
+    save_mapping(processor)
     return 0
 
 if __name__ == "__main__":

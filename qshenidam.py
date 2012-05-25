@@ -37,7 +37,7 @@ def launch(model):
     global done,error,canceled
     canceled = False
     queue = squeue.Queue()
-    notifier = shenidam.CancelableProgressNotifier(queue,5)
+    notifier = shenidam.CancelableProgressNotifier(queue,5 if model.mode == u"remix" else 3)
     fileprocessor = shenidam.ShenidamFileProcessor(model,notifier)
     progress = QtGui.QProgressDialog("","Abort",0,100,parent=frame)
     progress.setAutoClose(False)
@@ -255,7 +255,7 @@ class TableSelectionBox(QtGui.QWidget):
         self.b_del.clicked.connect(self.remove)
         self.setLayout(hbox)
         self.table.setColumnCount(3)
-        self.table.setHorizontalHeaderLabels(["Output pattern","Audio-only output","FFMPEG Remix Parameters"])
+        self.table.setHorizontalHeaderLabels(["Output pattern","Audio-only output","AVCONV Remix Parameters"])
         self.add()
         self.table.horizontalHeader().setResizeMode(QtGui.QHeaderView.Stretch)
     def remove(self):
@@ -282,7 +282,7 @@ class SingleFileConversionWindow(QtGui.QWidget):
         self.input_field = FileInput("AV-Track to match",default_folder=get_latest_directory)
         self.output_field = FileInput("Output file",default_folder=get_latest_directory,file_mode=QtGui.QFileDialog.AnyFile,accept_mode=QtGui.QFileDialog.AcceptSave)
         self.checkbox = QtGui.QCheckBox()
-        self.remix_params_field = TextBox("FFMPEG remix parameters","default")
+        self.remix_params_field = TextBox("AVCONV remix parameters","default")
         hbox = QtGui.QHBoxLayout()
         hbox.addWidget(QtGui.QLabel("Audio-only output"))
         hbox.addWidget(self.checkbox)
@@ -389,7 +389,7 @@ class PreferencesWindow(QtGui.QDialog):
         QtGui.QWidget.__init__(self)
         self.tmp_dir_field =  FileInput(None,file_mode=QtGui.QFileDialog.Directory,accept_mode=QtGui.QFileDialog.AcceptOpen)
         self.output_tmp_dir_field = FileInput(None,file_mode=QtGui.QFileDialog.Directory,accept_mode=QtGui.QFileDialog.AcceptOpen)
-        self.ffmpeg_field =  QtGui.QLineEdit("")
+        self.avconv_field =  QtGui.QLineEdit("")
         self.shenidam_field =  QtGui.QLineEdit("")
         self.shenidam_extra_args_field = QtGui.QLineEdit("")
         self.audio_export_params_field = QtGui.QLineEdit("")
@@ -398,15 +398,15 @@ class PreferencesWindow(QtGui.QDialog):
         grid = QtGui.QGridLayout()
         grid.addWidget(QtGui.QLabel("Temporary Directory (should be in RAM if you have enough of it)"),0,0)
         grid.addWidget(QtGui.QLabel("Output Temporary Directory (Should be optimally on same drive/volume/partition as outputs)"),1,0)
-        grid.addWidget(QtGui.QLabel("FFMPEG Command/Executable"),2,0)
+        grid.addWidget(QtGui.QLabel("AVCONV Command/Executable"),2,0)
         grid.addWidget(QtGui.QLabel("Shenidam Command/Executable"),3,0)
         grid.addWidget(QtGui.QLabel("Extra parameters to pass to shenidam\n(typically working sample rate)"),4,0)
-        grid.addWidget(QtGui.QLabel("Extra parameters to pass to FFMPEG for audio extraction"),5,0)
-        grid.addWidget(QtGui.QLabel("Default parameters to pass to FFMPEG\nfor audio remixing (audio mode)"),6,0)
-        grid.addWidget(QtGui.QLabel("Default parameters to pass to FFMPEG\nfor audio remixing (audio/video mode)"),7,0)
+        grid.addWidget(QtGui.QLabel("Extra parameters to pass to AVCONV for audio extraction"),5,0)
+        grid.addWidget(QtGui.QLabel("Default parameters to pass to AVCONV\nfor audio remixing (audio mode)"),6,0)
+        grid.addWidget(QtGui.QLabel("Default parameters to pass to AVCONV\nfor audio remixing (audio/video mode)"),7,0)
         grid.addWidget(self.tmp_dir_field,0,1)
         grid.addWidget(self.output_tmp_dir_field,1,1)
-        grid.addWidget(self.ffmpeg_field,2,1)
+        grid.addWidget(self.avconv_field,2,1)
         grid.addWidget(self.shenidam_field,3,1)
         grid.addWidget(self.shenidam_extra_args_field,4,1)
         grid.addWidget(self.audio_export_params_field,5,1)
@@ -429,12 +429,12 @@ class PreferencesWindow(QtGui.QDialog):
     def load_defaults(self):
         self.tmp_dir_field.setText(tempfile.gettempdir())
         self.output_tmp_dir_field.setText(tempfile.gettempdir())
-        self.ffmpeg_field.setText("ffmpeg")
+        self.avconv_field.setText("avconv")
         self.shenidam_field.setText("shenidam")
         self.shenidam_extra_args_field.setText("")
-        self.audio_export_params_field.setText("-acodec pcm_s24le -f wav")
-        self.default_audio_remix_params_field.setText("-acodec copy")
-        self.default_av_audio_remix_params_field.setText("-acodec copy -vcodec copy")
+        self.audio_export_params_field.setText("-c:a pcm_s24le -f wav")
+        self.default_audio_remix_params_field.setText("-c:a copy")
+        self.default_av_audio_remix_params_field.setText("-c:a copy -c:v copy")
     def load(self):
         self.first_time = False
         try:
@@ -444,8 +444,8 @@ class PreferencesWindow(QtGui.QDialog):
                     self.tmp_dir_field.setText(unicode(d["tmp_dir"]))
                 if "output_tmp_dir" in d:
                     self.output_tmp_dir_field.setText(unicode(d["output_tmp_dir"]))
-                if "ffmpeg" in d:
-                    self.ffmpeg_field.setText(unicode(d["ffmpeg"]))
+                if "avconv" in d:
+                    self.avconv_field.setText(unicode(d["avconv"]))
                 if "shenidam" in d:
                     self.shenidam_field.setText(unicode(d["shenidam"]))
                 if "shenidam_extra_args" in d:
@@ -461,7 +461,7 @@ class PreferencesWindow(QtGui.QDialog):
     def data(self):
         return {
         "tmp_dir":unicode(self.tmp_dir_field.text()),
-        "ffmpeg":unicode(self.ffmpeg_field.text()),
+        "avconv":unicode(self.avconv_field.text()),
         "shenidam":unicode(self.shenidam_field.text()),
         "shenidam_extra_args":unicode(self.shenidam_extra_args_field.text()),
         "audio_export_params":unicode(self.audio_export_params_field.text()),
