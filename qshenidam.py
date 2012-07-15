@@ -37,7 +37,7 @@ def launch(model):
     global done,error,canceled
     canceled = False
     queue = squeue.Queue()
-    notifier = shenidam.CancelableProgressNotifier(queue,5 if model.mode == u"remix" else 3)
+    notifier = shenidam.CancelableProgressNotifier(queue,5)
     fileprocessor = shenidam.ShenidamFileProcessor(model,notifier)
     progress = QtGui.QProgressDialog("","Abort",0,100,parent=frame)
     progress.setAutoClose(False)
