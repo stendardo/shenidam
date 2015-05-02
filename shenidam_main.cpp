@@ -31,7 +31,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
-#include "boost/thread.hpp"
+#include <thread>
 
 
 #include "shenidam.h"
@@ -210,7 +210,7 @@ int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,int in, 
 }
 int parse_options(int argc, char** argv)
 {
-    num_threads = boost::thread::hardware_concurrency();
+    num_threads = std::thread::hardware_concurrency() || 1;
 	int i = 1;
 	while(i < argc)
 	{
