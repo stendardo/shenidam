@@ -14,10 +14,10 @@ SET(CMAKE_CXX_FLAGS "-Wall")
 SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -fprefetch-loop-arrays -funroll-loops")
 SET(CMAKE_CXX_FLAGS_RELEASE "-O2 -funroll-loops -fprefetch-loop-arrays")
 SET(CMAKE_CXX_FLAGS_DEBUG  "-O0 -g")
+SET(CMAKE_CXX_FLAGS "-std=c++11")
 
 option (ENABLE_OPENMP  "Use OpenMP for parallel processing if available (potential extra-small speedup on SMP machines - experimental)" OFF) 
 option (ENABLE_FFTW_THREADING "Use FFTW threading support if available (potential significant speedup on SMP machines)" ON) 
-option (WITH_BOOST_THREAD "Use boost::thread if available to determine total number of CPUs (effective only when ENABLE_FFTW_THREADING is available)" ON) 
 option (ENABLE_TEST_MODE "Enables test mode (requires boost::random)" ON) 
 
 INCLUDE (OptimizeForArchitecture.cmake)
@@ -67,24 +67,6 @@ if (NOT HAVE_SRC)
     message(SEND_ERROR "No libsamplerate library available.")
 endif()
 
-if (WITH_BOOST_THREAD)
-    CHECK_LIBRARY_EXISTS(boost_thread _init "" HAVE_BOOST_THREAD)
-    CHECK_INCLUDE_FILE_CXX( "boost/thread.hpp" HAVE_BOOST_THREAD_H)
-
-
-    if (HAVE_BOOST_THREAD_H AND HAVE_BOOST_THREAD)
-        set (SHENIDAM_HAVE_BOOST_THREAD 1)
-        set (EXTRA_LIBS ${EXTRA_LIBS} boost_thread)
-    else()
-        if (NOT HAVE_BOOST_THREAD_H)
-            message(WARNING "No boost::thread headers available.")
-        endif()
-        if (NOT HAVE_BOOST_THREAD)
-            message(WARNING "No boost::thread library available.")
-        endif()
-    endif()
-
-endif()
 if (ENABLE_TEST_MODE)
     CHECK_CXX_SOURCE_COMPILES( "#include \"boost/random.hpp\"
 boost::mt19937 gen;
