@@ -22,8 +22,8 @@
 #define SHENIDAM_H_
 
 #include <complex.h>
-#include <fftw3.h>
-#include <samplerate.h>
+#include "fftw3.h"
+#include "samplerate.h"
 
 
 #ifdef __cplusplus
