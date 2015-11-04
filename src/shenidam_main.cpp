@@ -20,8 +20,12 @@
 
 
 #include "config.h"
+
+
+#ifdef SHENIDAM_ENABLE_TEST_MODE
 #include "boost/random.hpp"
-#include "boost/foreach.hpp"
+#endif
+
 
 #include "ctime"
 #include <vector>
@@ -39,7 +43,6 @@
 #include "sndfile.h"
 
 
-#define foreach BOOST_FOREACH
 
 template<typename T> std::string to_string(T value)
 {
@@ -234,10 +237,12 @@ int parse_options(int argc, char** argv)
                return 1;
            }
         }
+        #ifdef SHENIDAM_ENABLE_TEST_MODE
         else if (arg == "-t" || arg == "--test")
         {
             test = true;
         }
+        #endif
         else if (arg == "-v" || arg == "--verbose")
         {
             verbose = true;
@@ -410,7 +415,9 @@ void usage()
 			"\t-m\t--send_messages [filename_1 .. filename_n]\n\t\tSend messages/events to standard output\n\n"
 			"\t-rq\t--resampling-quality [0-4]\n\t\tResampling quality (higher takes longer and is more precise. Default is 2.)\n\n"
 			"\t-s\t--sample-rate real\n\t\tSample rate for audio processing (default 16000, more means more memory and cpu cycles and potentially more precise calculation).\n\n"
+			#ifdef SHENIDAM_ENABLE_TEST_MODE
 			"\t-t\t--test\n\t\ttest mode (requires only base). Tests critical noise boundary according to number of tries and threshold.\n\n"
+			#endif
 			"\t-nt\t--num-tries integer\n\t\tNumber of tries for test mode (default 5). More means more precise boundary and processing time.\n\n"
 			"\t-tt\t--test-threshold real\n\t\tThreshold for determining a correct match in test mode (Default 1 second)\n\n"
 			"\t-ts\t--test-track-size real\n\t\tSize in seconds of generated track for test mode (Default 120s, needs to be less than the audio signal's length.)\n\n"
@@ -514,6 +521,8 @@ int file_info()
 	return 0;
 }
 
+#ifdef SHENIDAM_ENABLE_TEST_MODE
+
 bool test_once(shenidam_t processor, float* base,size_t total_num_samples,double sample_rate,size_t num_samples_track, double sigma)
 {
 	int real_in = randi(0,total_num_samples-num_samples_track-1);
@@ -613,6 +622,7 @@ int do_test()
 	shenidam_destroy(processor);
 	return 0;
 }
+#endif
 int main(int argc, char **argv) {
 	if(parse_options(argc,argv))
 	{
@@ -660,7 +670,9 @@ int main(int argc, char **argv) {
 	}
 	if (test)
 	{
+		#ifdef SHENIDAM_ENABLE_TEST_MODE
 		return do_test();
+		#endif
 	}
 	else if (can_open_mode)
 	{
