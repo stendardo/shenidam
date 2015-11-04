@@ -92,8 +92,9 @@ bool return_only = false;
 bool version = false;
 int num_threads = 1;
 int src_converter = SRC_SINC_FASTEST;
+#ifdef SHENIDAM_ENABLE_TEST_MODE
 boost::mt19937 gen(std::time(0));
-
+#endif
 
 
 void send_message(std::string event)
@@ -125,7 +126,7 @@ void send_message(std::string event,std::map<std::string,std::string> kv)
         std::cout << std::endl;
     }
 }
-
+#ifdef SHENIDAM_ENABLE_TEST_MODE
 double randn(double m, double s)
 {
 	boost::normal_distribution<> dist(m, s);
@@ -145,32 +146,7 @@ void add_gaussian_noise(float* samples,size_t num_samples_d,double sigma)
 		samples[i] += randn(0,sigma);
 	}
 }
-void normalize(float* samples,size_t num_samples_d)
-{
-	double mean = 0;
-	double var = 0;
-	for(size_t i = 0; i < num_samples_d; i++)
-	{
-		mean += samples[i];
-		var += samples[i]*samples[i];
-	}
-	mean /= num_samples_d;;
-	var = sqrt(var-mean*mean);
-	if (var == 0)
-	{
-		for(size_t i = 0; i < num_samples_d; i++)
-		{
-			samples[i]=(samples[i]-mean);
-		}
-	}
-	else
-	{
-		for(size_t i = 0; i < num_samples_d; i++)
-		{
-			samples[i]=(samples[i]-mean)/var;
-		}
-	}
-}
+#endif
 int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,int in, size_t sample_length)
 {
 	if (!info_in->seekable)
