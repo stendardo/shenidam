@@ -56,7 +56,7 @@ static int read_sndfile_average(SNDFILE* sndfile,SF_INFO* info,float** result)
 	float *res = *result =(float*) std::malloc(sizeof(float)*n*1024);
 	float* frame = (float*)std::malloc(sizeof(float)*info->channels*1024);
 
-	for (int i = 0; i < n;i++)
+	for (size_t i = 0; i < n;i++)
 	{
 
 		sf_readf_float(sndfile,frame,1024);
@@ -182,7 +182,7 @@ int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,int in, 
 	sf_seek(sndfile,real_in,SEEK_SET);
 	long end = in + sample_length;
 	
-	if (((size_t)end) > info_in->frames)
+	if (end > info_in->frames)
 	{
 		end = info_in->frames;
 	}
@@ -194,7 +194,7 @@ int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,int in, 
 		sf_writef_float(out,frame,1);
 		j++;
 	}
-	for(size_t i = 0; i < end ; i+=1024)
+	for(int i = 0; i < end ; i+=1024)
 	{
 	    size_t frames_to_transfer = end -i;
 	    frames_to_transfer = frames_to_transfer>1024?1024:frames_to_transfer;

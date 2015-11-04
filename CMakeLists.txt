@@ -11,11 +11,10 @@ IF(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 ENDIF()
 
 # Select flags.
-SET(CMAKE_CXX_FLAGS "-Wall")
 SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g -fprefetch-loop-arrays -funroll-loops")
 SET(CMAKE_CXX_FLAGS_RELEASE "-O2 -funroll-loops -fprefetch-loop-arrays")
 SET(CMAKE_CXX_FLAGS_DEBUG  "-O0 -g")
-SET(CMAKE_CXX_FLAGS "-std=c++11")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11")
 
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
