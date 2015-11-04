@@ -36,6 +36,7 @@
 #include <cstring>
 #include <sstream>
 #include <thread>
+#include <iostream>
 
 
 #include "shenidam.h"
