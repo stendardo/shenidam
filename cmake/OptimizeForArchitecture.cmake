@@ -1,5 +1,5 @@
-include (AddCompilerFlag.cmake)
-include (MacroEnsureVersion.cmake)
+include (AddCompilerFlag)
+include (MacroEnsureVersion)
 
 macro(_my_find _list _value _ret)
    list(FIND ${_list} "${_value}" _found)

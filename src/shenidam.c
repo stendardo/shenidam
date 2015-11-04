@@ -29,9 +29,7 @@
 #include "samplerate.h"
 #include "setjmp.h"
 #include "config.h"
-#ifdef SHENIDAM_PARALLEL_OMP
-#include "omp.h"
-#endif
+
 
 typedef float sample_d;
 typedef fftwf_complex sample_f;
@@ -111,7 +109,7 @@ static void normalize(sample_d* samples,size_t num_samples_d)
 {
 	double mean = 0;
 	double var = 0;
-	#pragma omp parallel for reduction(+:mean) reduction(+:var)
+	
 	for(size_t i = 0; i < num_samples_d; i++)
 	{
 		mean += samples[i];
@@ -121,7 +119,6 @@ static void normalize(sample_d* samples,size_t num_samples_d)
 	var = sqrt(var-mean*mean);
 	if (var == 0)
 	{
-	    #pragma omp parallel for
 		for(size_t i = 0; i < num_samples_d; i++)
 		{
 			samples[i]=(samples[i]-mean);
@@ -129,7 +126,6 @@ static void normalize(sample_d* samples,size_t num_samples_d)
 	}
 	else
 	{
-	    #pragma omp parallel for
 		for(size_t i = 0; i < num_samples_d; i++)
 		{
 			samples[i]=(samples[i]-mean)/var;
@@ -394,7 +390,6 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 	ehfree(track);
 	base_f = fft(base,common_size,impl->num_threads);
 	ehfree(base);
-	#pragma omp parallel for
 	for (size_t i = 0; i < common_size_f;i++)
 	{
 		track_f[i]=conjf(track_f[i])*base_f[i];
