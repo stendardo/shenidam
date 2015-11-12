@@ -73,11 +73,12 @@ install (FILES "${CMAKE_SOURCE_DIR}/include/shenidam.h" DESTINATION ${SHENIDAM_I
 
 if (WITH_SHENIDAM_AV OR WITH_QSHENIDAM)
     SET(SHENIDAM_PYTHON_DIR_REL "lib/shenidam/python/")
+    SET(SHENIDAM_PYTHON_DIR "${CMAKE_INSTALL_PREFIX}/${SHENIDAM_PYTHON_DIR_REL}")
     find_package(PythonInterp)
     install (FILES "${CMAKE_SOURCE_DIR}/python/shenidam.py" DESTINATION ${SHENIDAM_PYTHON_DIR_REL})
     
     if (WITH_SHENIDAM_AV)
-        SET(SHENIDAM_PYTHON_DIR "${CMAKE_INSTALL_PREFIX}/${SHENIDAM_PYTHON_DIR_REL}")
+
         configure_file("${CMAKE_SOURCE_DIR}/templates/shenidam-av.in" "${CMAKE_BINARY_DIR}/shenidam-av")
         
         install (FILES "${CMAKE_SOURCE_DIR}/python/shenidam_av.py" DESTINATION ${SHENIDAM_PYTHON_DIR_REL})

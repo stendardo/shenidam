@@ -137,8 +137,8 @@ static sample_f* fft(sample_d* samples_d,size_t num_samples_d,int num_threads)
 
 	size_t num_samples_f = num_samples_d/2 + 1;
 	sample_f* samples_f = ehmalloc(sizeof(sample_f)*num_samples_f);
-	sample_d* buffer_d = FFT_MALLOC(sizeof(sample_d)*num_samples_d);
-	sample_f* buffer_f = FFT_MALLOC(sizeof(sample_f)*num_samples_f);
+	sample_d* buffer_d = fft_ehmalloc(sizeof(sample_d)*num_samples_d);
+	sample_f* buffer_f = fft_ehmalloc(sizeof(sample_f)*num_samples_f);
 #ifdef SHENIDAM_FFT_THREADED
     if (num_threads)
     {
