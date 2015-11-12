@@ -87,7 +87,7 @@ if (WITH_SHENIDAM_AV OR WITH_QSHENIDAM)
     if (WITH_QSHENIDAM)
         ADD_CUSTOM_COMMAND(
             OUTPUT ${CMAKE_BINARY_DIR}/qshenidam_icon.py
-            COMMAND echo __data__ = \\'`base64 ${CMAKE_SOURCE_DIR}/icons/qshenidam_256.png`\\' > ${CMAKE_BINARY_DIR}/qshenidam_icon.py
+            COMMAND echo __data__ = \\'`python ${CMAKE_SOURCE_DIR}/tools/tobase64.py ${CMAKE_SOURCE_DIR}/icons/qshenidam_256.png`\\' > ${CMAKE_BINARY_DIR}/qshenidam_icon.py
             DEPENDS ${CMAKE_SOURCE_DIR}/icons/qshenidam_256.png
         )
         add_custom_target(qshenidam_icon ALL 
