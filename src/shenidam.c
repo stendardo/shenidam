@@ -253,7 +253,7 @@ static size_t get_common_size(size_t minimal_size)
 	{
 		res<<=1;
 	}
-	return res;
+	return 2*res;
 }
 
 shenidam_t shenidam_create(double base_sample_rate,int num_threads)
@@ -408,7 +408,7 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 			in = i;
 		}
 	}
-	if (in > common_size-num_samples/2)
+	if (in > common_size/2)
 	{
 		in -= common_size;
 	}
