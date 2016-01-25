@@ -45,8 +45,8 @@ typedef fftwf_plan FFT_PLAN;
 
 typedef struct
 {
+	double working_sample_rate;
 	double base_sample_rate;
-	double base_real_sample_rate;
 	sample_d* base;
 	size_t base_num_samples;
 	int num_threads;
@@ -253,7 +253,7 @@ static size_t get_common_size(size_t minimal_size)
 	{
 		res<<=1;
 	}
-	return 2*res;
+	return res;
 }
 
 shenidam_t shenidam_create(double base_sample_rate,int num_threads)
@@ -277,7 +277,7 @@ shenidam_t shenidam_create(double base_sample_rate,int num_threads)
 	}
 	shenidam_t_impl* res = (shenidam_t_impl*)malloc(sizeof(shenidam_t_impl));
 	res->base = NULL;
-	res->base_sample_rate = base_sample_rate;
+	res->working_sample_rate = base_sample_rate;
 	res->num_threads = num_threads;
 	res->src_converter = SRC_SINC_FASTEST;
 	return res;
@@ -316,18 +316,18 @@ int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,si
 		return INVALID_ARGUMENT;
 	}
 	normalize(base,num_samples);
-	size_t num_samples_new = (size_t)round(num_samples * impl->base_sample_rate/sample_rate);
-	temp = resample(base,num_samples,impl->base_sample_rate/sample_rate,&num_samples_new,impl->num_threads,impl->src_converter);
+	size_t num_samples_new = (size_t)round(num_samples * impl->working_sample_rate/sample_rate);
+	temp = resample(base,num_samples,impl->working_sample_rate/sample_rate,&num_samples_new,impl->num_threads,impl->src_converter);
 	base = temp;
 	impl->base_num_samples = num_samples_new;
 
 	impl->base = base;
-	impl->base_real_sample_rate = sample_rate;
+	impl->base_sample_rate = sample_rate;
 
 	return SUCCESS;
 }
 
-int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samples,size_t num_samples,double sample_rate,int* in_point,size_t* length)
+int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samples,size_t track_num_samples,double track_sample_rate,int* in_point,size_t* length)
 {
 	if (shenidam_obj == NULL)
 	{
@@ -343,11 +343,11 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 	{
 		return BASE_SIGNAL_NOT_SET;
 	}
-	if (sample_rate <= 0)
+	if (track_sample_rate <= 0)
 	{
 		return INVALID_ARGUMENT;
 	}
-	if (num_samples == 0)
+	if (track_num_samples == 0)
 	{
 		return INVALID_ARGUMENT;
 	}
@@ -358,25 +358,25 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 	sample_f* track_f;
 	sample_f* base_f;
 	base = impl->base;
-	if (convert_to_samples(input_format, samples, num_samples,&track))
+	if (convert_to_samples(input_format, samples, track_num_samples,&track))
 	{
 		return INVALID_ARGUMENT;
 	}
-	normalize(track,num_samples);
-	double sample_rate_ratio = impl->base_sample_rate/sample_rate;
+	normalize(track,track_num_samples);
+	double sample_rate_ratio = impl->working_sample_rate/track_sample_rate;
+	double track_num_samples_working = track_num_samples;
 	if (sample_rate_ratio != 1)
 	{
-		size_t num_samples_temp = (size_t)ceil(num_samples*sample_rate_ratio);
-		temp_d = resample(track,num_samples,sample_rate_ratio,&num_samples_temp,impl->num_threads,impl->src_converter);
+		size_t track_num_samples_temp = (size_t)ceil(track_num_samples*sample_rate_ratio);
+		temp_d = resample(track,track_num_samples,sample_rate_ratio,&track_num_samples_temp,impl->num_threads,impl->src_converter);
 		free(track);
 		track = temp_d;
-		num_samples = num_samples_temp;
+		track_num_samples_working = track_num_samples_temp;
 
 	}
-	*length = num_samples;
-	size_t common_size = get_common_size(num_samples + impl->base_num_samples);
+	size_t common_size = get_common_size(track_num_samples + impl->base_num_samples);
 	size_t common_size_f = common_size / 2 + 1;
-	temp_d = resize(track,num_samples,common_size);
+	temp_d = resize(track,track_num_samples_working,common_size);
 	ehfree(track);
 	track = temp_d;
 	temp_d = resize(base,impl->base_num_samples,common_size);
@@ -408,12 +408,12 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 			in = i;
 		}
 	}
-	if (in > common_size/2)
+	if (in > common_size-track_num_samples_working)
 	{
 		in -= common_size;
 	}
-	*in_point = round(in*impl->base_real_sample_rate/impl->base_sample_rate);
-	*length = round(*length*impl->base_real_sample_rate/impl->base_sample_rate);
+	*in_point = round(in*impl->base_sample_rate/impl->working_sample_rate);
+	*length = round(track_num_samples_working*impl->base_sample_rate/impl->working_sample_rate);
 	ehfree(convolved);
 	return SUCCESS;
 }

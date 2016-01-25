@@ -171,7 +171,7 @@ int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,int in, 
 		sf_writef_float(out,frame,1);
 		j++;
 	}
-	for(int i = 0; i < end ; i+=1024)
+	for(int i = real_in; i < end ; i+=1024)
 	{
 	    size_t frames_to_transfer = end -i;
 	    frames_to_transfer = frames_to_transfer>1024?1024:frames_to_transfer;
