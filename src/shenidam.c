@@ -408,7 +408,7 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 			in = i;
 		}
 	}
-	if (in > common_size-track_num_samples_working)
+	if (in > (track_num_samples_working<impl->base_num_samples?common_size-track_num_samples_working:impl->base_num_samples))
 	{
 		in -= common_size;
 	}
