@@ -27,8 +27,8 @@
 #include "fftw3.h"
 #include "float.h"
 #include "samplerate.h"
-#include "setjmp.h"
 #include "config.h"
+
 
 
 typedef float sample_d;
@@ -68,13 +68,9 @@ const char* shenidam_get_error_message(int error)
 		return "Base signal not set";
 	case (NULL_OBJECT):
 		return "NULL shenidam object";
-	case(ALLOCATION_ERROR):
-		return "Could not allocate memory";
 	}
 	return "Unknown error";
 }
-
-jmp_buf jb;
 
 
 int initialized_module = 0;
@@ -84,7 +80,7 @@ static void* fft_ehmalloc(size_t size)
 	void* res = FFT_MALLOC(size);
 	if (res == NULL)
 	{
-		longjmp(jb,0);
+		fprintf(stderr,"[fft_ehmalloc] ERROR: could not allocate buffer of size %zd - likely out of memory\n",size);
 	}
 	return res;
 }
@@ -93,7 +89,7 @@ static void* ehmalloc(size_t size)
 	void* res = malloc(size);
 	if (res == NULL)
 	{
-		longjmp(jb,0);
+		fprintf(stderr,"[ehmalloc] ERROR: could not allocate buffer of size %zd - likely OOM\n",size);
 	}
 	return res;
 }
@@ -271,10 +267,6 @@ shenidam_t shenidam_create(double base_sample_rate,int num_threads)
 		initialized_module = 1;
 	}
 	
-	if (setjmp(jb))
-	{
-		return NULL;
-	}
 	shenidam_t_impl* res = (shenidam_t_impl*)malloc(sizeof(shenidam_t_impl));
 	res->base = NULL;
 	res->working_sample_rate = base_sample_rate;
@@ -300,10 +292,6 @@ int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,si
 	if (shenidam_obj == NULL)
 	{
 		return NULL_OBJECT;
-	}
-	if (setjmp(jb))
-	{
-		return ALLOCATION_ERROR;
 	}
 	sample_d* base,*temp;
 	shenidam_t_impl* impl =((shenidam_t_impl*)shenidam_obj);
@@ -332,10 +320,6 @@ int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samp
 	if (shenidam_obj == NULL)
 	{
 		return NULL_OBJECT;
-	}
-	if (setjmp(jb))
-	{
-		return ALLOCATION_ERROR;
 	}
 	shenidam_t_impl* impl =((shenidam_t_impl*)shenidam_obj);
 
@@ -424,10 +408,7 @@ int shenidam_destroy(shenidam_t shenidam_obj)
 	{
 		return NULL_OBJECT;
 	}
-	if (setjmp(jb))
-	{
-		return ALLOCATION_ERROR;
-	}
+
 	shenidam_t_impl* impl =((shenidam_t_impl*)shenidam_obj);
 	ehfree(impl->base);
 	ehfree(impl);
