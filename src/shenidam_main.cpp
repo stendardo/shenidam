@@ -488,6 +488,11 @@ int file_info()
 	    send_message("cannot-open-file","file",base_filename);
 	    return 1;
 	}
+	if (!base_info.seekable)
+	{
+		send_message("file-not-seekable","file",base_filename);
+		return 1;
+	}
 	std::map<std::string,std::string> kv;
     kv["file"]=base_filename;
     kv["channels"]= to_string(base_info.channels);
