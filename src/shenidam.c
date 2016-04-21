@@ -263,7 +263,6 @@ shenidam_t shenidam_create(double base_sample_rate,int num_threads)
         #ifdef SHENIDAM_FFT_THREADED
             fftwf_init_threads();
         #endif
-		//Add shenidam initialization code here-
 		initialized_module = 1;
 	}
 	
