@@ -22,6 +22,7 @@
 #define SHENIDAM_H_
 
 #include <complex.h>
+#include <stdint.h>
 #include "fftw3.h"
 #include "samplerate.h"
 
@@ -97,7 +98,7 @@ int shenidam_set_base_audio(shenidam_t shenidam_obj,int format, void* samples,si
  * @param length the length of the matching portion of the base.
  * @return SUCCESS, or error code.
  */
-int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samples,size_t num_samples,double sample_rate,int* in_point,size_t* length);
+int shenidam_get_audio_range(shenidam_t shenidam_obj,int input_format,void* samples,size_t num_samples,double sample_rate,intmax_t* in_point,size_t* length);
 /**
  * Destroy the audio position determiner.
  * 

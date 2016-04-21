@@ -85,7 +85,7 @@ double size_test_track = 300;
 std::vector<std::string> in_tracks;
 std::vector<std::string> out_tracks;
 std::string base_filename;
-double sample_rate = 16000;
+double sample_rate = 1000;
 int num_files = 0;
 double threshold = 1;
 int num_tries = 5;
@@ -148,7 +148,7 @@ void add_gaussian_noise(float* samples,size_t num_samples_d,double sigma)
 	}
 }
 #endif
-int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,int in, size_t sample_length)
+int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,intmax_t in, size_t sample_length)
 {
 	if (!info_in->seekable)
 	{
@@ -166,12 +166,12 @@ int copy_partial_sndfile(SNDFILE* sndfile,SF_INFO* info_in,SNDFILE* out,int in, 
 	size_t j = 0;
 	float* frame =(float*) std::malloc(sizeof(float)*info_in->channels*1024);
 	memset(frame,0,sizeof(float)*info_in->channels*1024);
-	for(long i = in; i < 0; i++)
+	for(intmax_t i = in; i < 0; i++)
 	{
 		sf_writef_float(out,frame,1);
 		j++;
 	}
-	for(int i = real_in; i < end ; i+=1024)
+	for(intmax_t i = real_in; i < end ; i+=1024)
 	{
 	    size_t frames_to_transfer = end -i;
 	    frames_to_transfer = frames_to_transfer>1024?1024:frames_to_transfer;
@@ -305,9 +305,9 @@ int parse_options(int argc, char** argv)
         {
             if (i == argc) return 1;
             sample_rate = strtod(argv[i++],NULL);
-            if (sample_rate <= 0)
+            if (sample_rate < 1000 || sample_rate > 48000)
             {
-                fprintf(stderr,"ERROR: Invalid sample rate.\n");
+                fprintf(stderr,"ERROR: Invalid sample rate. Number between 1000 and 48000 required (1000 is enough for most cases).\n");
                 return 1;
             }
         }
@@ -391,7 +391,7 @@ void usage()
 			"\t-d\t--default-output [filename_1 .. filename_n]\n\t\tset the n output tracks\n\n"
 			"\t-m\t--send_messages [filename_1 .. filename_n]\n\t\tSend messages/events to standard output\n\n"
 			"\t-rq\t--resampling-quality [0-4]\n\t\tResampling quality (higher takes longer and is more precise. Default is 2.)\n\n"
-			"\t-s\t--sample-rate real\n\t\tSample rate for audio processing (default 16000, more means more memory and cpu cycles and potentially more precise calculation).\n\n"
+			"\t-s\t--sample-rate real\n\t\tSample rate for audio processing (default and minimum is 1000, more means more memory and cpu cycles and potentially more precise calculation).\n\n"
 			#ifdef SHENIDAM_ENABLE_TEST_MODE
 			"\t-t\t--test\n\t\ttest mode (requires only base). Tests critical noise boundary according to number of tries and threshold.\n\n"
 			#endif
@@ -429,7 +429,7 @@ int process_audio()
 	{
 		std::string input_fn = in_tracks[i];
 		size_t length;
-		int in;
+		intmax_t in;
 		SF_INFO track_info;
 		std::memset(&track_info,0,sizeof(SF_INFO));
 		float* track_b;
@@ -507,12 +507,12 @@ int file_info()
 
 bool test_once(shenidam_t processor, float* base,size_t total_num_samples,double sample_rate,size_t num_samples_track, double sigma)
 {
-	int real_in = randi(0,total_num_samples-num_samples_track-1);
+	intmax_t real_in = (intmax_t)randi(0,total_num_samples-num_samples_track-1);
 	float* track = (float*) std::malloc(num_samples_track*sizeof(float));
 	std::memcpy(track,&base[real_in],num_samples_track*sizeof(float));
 	add_gaussian_noise(track,num_samples_track,sigma);
 	size_t dummy;
-	int in;
+	intmax_t in;
 	shenidam_get_audio_range(processor,FORMAT_SINGLE,track,num_samples_track,sample_rate,&in,&dummy);
 	std::free(track);
 	return std::abs(in - real_in)<sample_rate*threshold;
